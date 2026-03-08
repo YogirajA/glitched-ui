@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm install next@latest)",
+      "Bash(npx next --version)",
+      "Bash(npm run build)",
+      "Bash(npm run test)",
+      "Bash(npm run lint)",
+      "Bash(npx next lint --dir src)",
+      "Bash(npx eslint src --ext .ts,.tsx)"
+    ]
+  }
+}

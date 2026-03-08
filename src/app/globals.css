@@ -1,0 +1,6 @@
+/* Minimal reset — the theme system in Glitched.tsx handles everything else via <style> injection */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
