@@ -1,10 +1,9 @@
 import type { AnalysisResult } from "./types";
 
 /**
- * Mock result used in three scenarios:
+ * Mock result used in two scenarios:
  *   1. NEXT_PUBLIC_USE_MOCK=true (dev without API key)
  *   2. ?mock=plan URL param (E2E tests that skip the intake flow)
- *   3. API error fallback in Glitched.tsx
  */
 export const MOCK_RESULT: AnalysisResult = {
   profile: {
@@ -93,6 +92,28 @@ export const MOCK_RESULT: AnalysisResult = {
         "Fire the client that's 80% of your stress for 20% of income",
       ],
       metric: "Three retainer clients. Calendar yours to control.",
+    },
+  },
+  happinessAdvantage: {
+    attribution: "Shawn Achor, The Happiness Advantage",
+    glassHalfFull: {
+      headline: "You have more than you think.",
+      wins: [
+        "15 years of real-world financial pattern recognition no AI can replicate",
+        "A network of people who already trust your judgment",
+        "The crisis forced a pivot you would have delayed another decade",
+      ],
+    },
+    fallingUp:
+      "The layoff didn't end your career. It ended the version of your career that was slowly ending you. The skills are intact. The ceiling is gone.",
+    dailyPractice: {
+      day30: "Each morning, write one thing you learned the previous day about running your own business. Not goals — observations.",
+      day60: "At end of each week, write two sentences: what worked, what you'd change. Keep it ruthlessly short.",
+      day90: "Monthly: read back your day-30 and day-60 notes. The pattern of what you keep noticing is the signal.",
+    },
+    tetrisEffect: {
+      prompt: "For the next 7 days, notice every time a founder or small business owner complains about their finances.",
+      example: "A founder vents on Twitter about cash flow — that's a fractional CFO lead, not noise.",
     },
   },
 };

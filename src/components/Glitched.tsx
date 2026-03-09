@@ -463,13 +463,6 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
   const [animKey, setAnimKey] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea to content height
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [current]);
 
   const questions = useMemo<Question[]>(() => [
     {
@@ -599,7 +592,13 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
             data-testid="intake-textarea"
             ref={ref}
             value={current}
-            onChange={e => setCurrent(e.target.value)}
+            onChange={e => {
+              setCurrent(e.target.value);
+              // Auto-resize to content height
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onKeyDown={e => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); }
             }}
@@ -1483,12 +1482,15 @@ export default function Glitched() {
   const [screenVisible, setScreenVisible] = useState(true);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [breathingDone, setBreathingDone] = useState(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigateTo = useCallback((next: Screen) => {
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
     setScreenVisible(false);
-    setTimeout(() => {
+    navTimerRef.current = setTimeout(() => {
       setScreen(next);
       setScreenVisible(true);
+      navTimerRef.current = null;
     }, 280);
   }, []);
 

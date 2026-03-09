@@ -1,9 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserAnswers, AnalysisResult } from "@/lib/types";
 
+// Typed mirror of the upstream snake_case API schema.
+interface RawMilestone { milestone: string; actions: string[]; success_indicator: string; }
+interface RawPath {
+  title: string; type: string; fit: number;
+  revenue_range: string; time_to_first_dollar: string;
+  why_this_works: string; biggest_obstacle: string;
+  risk_level: string; effort_level: string;
+}
+interface RawApiResponse {
+  profile: {
+    sector: string; seniority: string; transferable_skills: string[];
+    primary_goal: string; core_anxiety: string; profile_summary: string;
+  };
+  paths: RawPath[];
+  plan: { first_move: string; warning: string; day30: RawMilestone; day60: RawMilestone; day90: RawMilestone; };
+  happiness_advantage: {
+    attribution: string;
+    glass_half_full: { headline: string; wins: string[] };
+    falling_up: string;
+    daily_practice: { day30: string; day60: string; day90: string };
+    tetris_effect: { prompt: string; example: string };
+  };
+}
+
 // The external API returns snake_case; map to the camelCase types the UI expects.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapApiResponse(raw: any): AnalysisResult {
+function mapApiResponse(raw: RawApiResponse): AnalysisResult {
   return {
     profile: {
       sector:             raw.profile.sector,
@@ -13,16 +36,16 @@ function mapApiResponse(raw: any): AnalysisResult {
       coreAnxiety:        raw.profile.core_anxiety,
       profileSummary:     raw.profile.profile_summary,
     },
-    paths: raw.paths.map((p: any) => ({
-      name:              p.title,
-      type:              p.type,
-      fit:               p.fit,
-      revenueRange:      p.revenue_range,
+    paths: raw.paths.map(p => ({
+      name:               p.title,
+      type:               p.type,
+      fit:                p.fit,
+      revenueRange:       p.revenue_range,
       timeToFirstRevenue: p.time_to_first_dollar,
-      whyThisWorks:      p.why_this_works,
-      biggestObstacle:   p.biggest_obstacle,
-      riskLevel:         p.risk_level,
-      effortLevel:       p.effort_level,
+      whyThisWorks:       p.why_this_works,
+      biggestObstacle:    p.biggest_obstacle,
+      riskLevel:          p.risk_level,
+      effortLevel:        p.effort_level,
     })),
     plan: {
       firstMove: raw.plan.first_move,
@@ -63,6 +86,8 @@ function mapApiResponse(raw: any): AnalysisResult {
  * NEXT_PUBLIC_USE_MOCK=true is handled entirely client-side in Glitched.tsx
  * and never reaches this route.
  */
+export const maxDuration = 60; // seconds — allow up to 60s for the multi-agent pipeline
+
 export async function POST(req: NextRequest) {
   try {
     const answers = (await req.json()) as Partial<UserAnswers>;
@@ -80,22 +105,30 @@ export async function POST(req: NextRequest) {
     // ── Mode 1: Forward to external private API ──────────────
     const agentsApiUrl = process.env.AGENTS_API_URL;
     if (agentsApiUrl) {
-      const upstream = await fetch(`${agentsApiUrl}/analyze`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(process.env.AGENTS_API_SECRET
-            ? { "x-api-key": process.env.AGENTS_API_SECRET }
-            : {}),
-        },
-        body: JSON.stringify(validAnswers),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 55_000);
+      let upstream: Response;
+      try {
+        upstream = await fetch(`${agentsApiUrl}/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(process.env.AGENTS_API_SECRET
+              ? { "x-api-key": process.env.AGENTS_API_SECRET }
+              : {}),
+          },
+          body: JSON.stringify(validAnswers),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!upstream.ok) {
         throw new Error(`Upstream API error: ${upstream.status}`);
       }
 
-      const result = mapApiResponse(await upstream.json());
+      const result = mapApiResponse((await upstream.json()) as RawApiResponse);
       return NextResponse.json(result);
     }
 

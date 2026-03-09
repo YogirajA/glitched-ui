@@ -10,7 +10,9 @@
       "Bash(npx next lint --dir src)",
       "Bash(npx eslint src --ext .ts,.tsx)",
       "WebFetch(domain:127.0.0.1)",
-      "Bash(curl -s http://127.0.0.1:8000/openapi.json)"
+      "Bash(curl -s http://127.0.0.1:8000/openapi.json)",
+      "Bash(grep -v \"^$\")",
+      "Bash(ls -la .env*)"
     ]
   }
 }

@@ -8,7 +8,7 @@ import { MOCK_RESULT } from "@/lib/mock-data";
 // using the same logic — keeping the contract explicit and testable here.
 
 function runAwafCheck(result: AnalysisResult): boolean {
-  const { profile, paths, plan } = result;
+  const { profile, paths, plan, happinessAdvantage } = result;
 
   if (!profile.sector || !profile.coreAnxiety || !profile.profileSummary) return false;
   if (!paths || paths.length !== 3) return false;
@@ -18,6 +18,11 @@ function runAwafCheck(result: AnalysisResult): boolean {
 
   const validRange = /\$[\d,k]+\s*[–-]\s*\$[\d,k]+/i;
   if (paths.some(p => !validRange.test(p.revenueRange))) return false;
+
+  if (!happinessAdvantage?.attribution) return false;
+  if (!happinessAdvantage.glassHalfFull?.headline || !happinessAdvantage.glassHalfFull.wins?.length) return false;
+  if (!happinessAdvantage.fallingUp) return false;
+  if (!happinessAdvantage.tetrisEffect?.prompt) return false;
 
   return true;
 }
