@@ -105,6 +105,7 @@ describe("Theme token completeness", () => {
     "rose", "roseBg", "roseBorder",
     "border", "borderHover", "scrollTrack", "scrollThumb",
     "grad1", "grad2", "btnPrimary", "btnPrimaryText", "inputBg", "footerBorder",
+    "cardShadow",
   ];
 
   it("MOCK_RESULT has all required profile fields", () => {
@@ -126,6 +127,6 @@ describe("Theme token completeness", () => {
 
   it("expected theme token keys are documented", () => {
     // Snapshot the key list so any token additions trigger a test update
-    expect(DARK_KEYS.length).toBe(27);
+    expect(DARK_KEYS.length).toBe(28);
   });
 });

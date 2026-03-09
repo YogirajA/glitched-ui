@@ -39,8 +39,27 @@ export interface Plan {
   day90: Milestone;
 }
 
+export interface HappinessAdvantage {
+  attribution: string;
+  glassHalfFull: {
+    headline: string;
+    wins: string[];
+  };
+  fallingUp: string;
+  dailyPractice: {
+    day30: string;
+    day60: string;
+    day90: string;
+  };
+  tetrisEffect: {
+    prompt: string;
+    example: string;
+  };
+}
+
 export interface AnalysisResult {
   profile: Profile;
   paths: Path[];
   plan: Plan;
+  happinessAdvantage: HappinessAdvantage;
 }

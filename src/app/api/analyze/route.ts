@@ -1,6 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserAnswers, AnalysisResult } from "@/lib/types";
 
+// The external API returns snake_case; map to the camelCase types the UI expects.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapApiResponse(raw: any): AnalysisResult {
+  return {
+    profile: {
+      sector:             raw.profile.sector,
+      seniority:          raw.profile.seniority,
+      transferableSkills: raw.profile.transferable_skills,
+      primaryGoal:        raw.profile.primary_goal,
+      coreAnxiety:        raw.profile.core_anxiety,
+      profileSummary:     raw.profile.profile_summary,
+    },
+    paths: raw.paths.map((p: any) => ({
+      name:              p.title,
+      type:              p.type,
+      fit:               p.fit,
+      revenueRange:      p.revenue_range,
+      timeToFirstRevenue: p.time_to_first_dollar,
+      whyThisWorks:      p.why_this_works,
+      biggestObstacle:   p.biggest_obstacle,
+      riskLevel:         p.risk_level,
+      effortLevel:       p.effort_level,
+    })),
+    plan: {
+      firstMove: raw.plan.first_move,
+      warning:   raw.plan.warning,
+      day30: { milestone: raw.plan.day30.milestone, actions: raw.plan.day30.actions, metric: raw.plan.day30.success_indicator },
+      day60: { milestone: raw.plan.day60.milestone, actions: raw.plan.day60.actions, metric: raw.plan.day60.success_indicator },
+      day90: { milestone: raw.plan.day90.milestone, actions: raw.plan.day90.actions, metric: raw.plan.day90.success_indicator },
+    },
+    happinessAdvantage: {
+      attribution:   raw.happiness_advantage.attribution,
+      glassHalfFull: {
+        headline: raw.happiness_advantage.glass_half_full.headline,
+        wins:     raw.happiness_advantage.glass_half_full.wins,
+      },
+      fallingUp:    raw.happiness_advantage.falling_up,
+      dailyPractice: {
+        day30: raw.happiness_advantage.daily_practice.day30,
+        day60: raw.happiness_advantage.daily_practice.day60,
+        day90: raw.happiness_advantage.daily_practice.day90,
+      },
+      tetrisEffect: {
+        prompt:  raw.happiness_advantage.tetris_effect.prompt,
+        example: raw.happiness_advantage.tetris_effect.example,
+      },
+    },
+  };
+}
+
 /**
  * POST /api/analyze
  *
@@ -34,9 +84,8 @@ export async function POST(req: NextRequest) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Pass a shared secret if the private API requires auth
           ...(process.env.AGENTS_API_SECRET
-            ? { Authorization: `Bearer ${process.env.AGENTS_API_SECRET}` }
+            ? { "x-api-key": process.env.AGENTS_API_SECRET }
             : {}),
         },
         body: JSON.stringify(validAnswers),
@@ -46,7 +95,7 @@ export async function POST(req: NextRequest) {
         throw new Error(`Upstream API error: ${upstream.status}`);
       }
 
-      const result = (await upstream.json()) as AnalysisResult;
+      const result = mapApiResponse(await upstream.json());
       return NextResponse.json(result);
     }
 
@@ -67,6 +116,7 @@ export async function POST(req: NextRequest) {
       const isModuleNotFound =
         importErr instanceof Error &&
         (importErr.message.includes("Cannot find module") ||
+          importErr.message.includes("Cannot find package") ||
           importErr.message.includes("Failed to fetch dynamically imported module") ||
           ("code" in importErr && (importErr as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND"));
 

@@ -48,6 +48,7 @@ export interface Theme {
   btnPrimaryText: string;
   inputBg: string;
   footerBorder: string;
+  cardShadow: string;
 }
 
 const DARK: Theme = {
@@ -78,6 +79,7 @@ const DARK: Theme = {
   btnPrimaryText: "#0D1B2A",
   inputBg:        "rgba(245,237,214,0.05)",
   footerBorder:   "rgba(245,237,214,0.08)",
+  cardShadow:     "0 1px 4px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.10)",
 };
 
 const LIGHT: Theme = {
@@ -108,6 +110,7 @@ const LIGHT: Theme = {
   btnPrimaryText: "#FAF6EE",
   inputBg:        "rgba(255,255,255,0.6)",
   footerBorder:   "rgba(26,18,8,0.08)",
+  cardShadow:     "0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05)",
 };
 
 interface ThemeCtxType {
@@ -155,6 +158,7 @@ const GlobalStyle = ({ t, isDark }: GlobalStyleProps) => (
       50%     { transform: translateY(-7px); }
     }
     @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:0.35} }
+    @keyframes softPulse { 0%,100%{opacity:0.7} 50%{opacity:0.25} }
     @keyframes breatheText { 0%,100%{opacity:0.45} 50%{opacity:1} }
 
     textarea::placeholder, input::placeholder { color: ${t.muted}; }
@@ -214,9 +218,25 @@ const ThemeToggle = () => {
           boxShadow: `0 0 8px ${t.amber}`,
         }} />
       </div>
-      <span style={{ fontSize: 14, lineHeight: 1 }}>
-        {isDark ? "☀️" : "🌙"}
-      </span>
+      {isDark ? (
+        /* Sun icon — shown in dark mode to indicate "switch to light" */
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={t.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      ) : (
+        /* Moon icon — shown in light mode to indicate "switch to dark" */
+        <svg width="14" height="14" viewBox="0 0 24 24" fill={t.amber} stroke="none">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      )}
     </button>
   );
 };
@@ -230,8 +250,14 @@ interface AmbientBgProps {
   phase: BgPhase;
 }
 
+// SVG noise texture — renders as organic grain at low opacity.
+// feTurbulence generates film-grain-like noise; at 3–5% opacity it reads
+// as material surface (like paper or darkroom print), not as decoration.
+const GRAIN_SVG =
+  `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")`;
+
 const AmbientBg = ({ phase }: AmbientBgProps) => {
-  const { t } = useTheme();
+  const { t, isDark } = useTheme();
   const configs: Record<BgPhase, [string, string]> = {
     neutral:   [t.grad1, t.grad2],
     breathing: [t.sageBg, t.amberBg],
@@ -240,15 +266,28 @@ const AmbientBg = ({ phase }: AmbientBgProps) => {
   const [c1, c2] = configs[phase];
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-      background: `
-        radial-gradient(ellipse 65% 55% at 15% 25%, ${c1}, transparent),
-        radial-gradient(ellipse 55% 65% at 85% 75%, ${c2}, transparent),
-        ${t.bg}
-      `,
-      transition: "background 1.8s ease",
-    }} />
+    <>
+      {/* Radial gradient layer */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        background: `
+          radial-gradient(ellipse 65% 55% at 15% 25%, ${c1}, transparent),
+          radial-gradient(ellipse 55% 65% at 85% 75%, ${c2}, transparent),
+          ${t.bg}
+        `,
+        transition: "background 1.8s ease",
+      }} />
+      {/* Grain texture overlay — dark: 4% / light: 2% */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1,
+        backgroundImage: GRAIN_SVG,
+        backgroundRepeat: "repeat",
+        backgroundSize: "200px 200px",
+        opacity: isDark ? 0.04 : 0.02,
+        mixBlendMode: "overlay",
+        transition: "opacity 0.5s ease",
+      }} />
+    </>
   );
 };
 
@@ -277,20 +316,32 @@ const LandingScreen = ({ onBegin }: LandingScreenProps) => {
         <>
           {/* Logo orb */}
           <div style={{ animation: "fadeUp 0.7s ease forwards", marginBottom: 44, textAlign: "center" }}>
+            {/* Orb — outer container floats, inner rings animate independently */}
             <div style={{
-              width: 60, height: 60, borderRadius: "50%",
-              border: `1.5px solid ${t.amber}`,
+              width: 120, height: 120, borderRadius: "50%",
+              border: `1.5px solid ${t.amberBorder}`,
               display: "flex", alignItems: "center", justifyContent: "center",
               margin: "0 auto 14px",
-              boxShadow: `0 0 36px ${t.amberBg}`,
+              boxShadow: `0 0 48px ${t.amberBg}`,
               animation: "float 4s ease-in-out infinite",
               background: t.amberBg,
               transition: "all 0.5s ease",
+              position: "relative",
             }}>
+              {/* Middle ring — soft pulse */}
               <div style={{
-                width: 11, height: 11, borderRadius: "50%",
+                position: "absolute",
+                width: 90, height: 90, borderRadius: "50%",
+                border: `1px solid ${t.amberBorder}`,
+                animation: "softPulse 3s 0.5s ease-in-out infinite",
+                transition: "border-color 0.5s ease",
+              }} />
+              {/* Inner dot */}
+              <div style={{
+                width: 18, height: 18, borderRadius: "50%",
                 background: t.amber,
-                boxShadow: `0 0 14px ${t.amber}`,
+                boxShadow: `0 0 18px ${t.amber}`,
+                position: "relative", zIndex: 1,
               }} />
             </div>
             <div style={{
@@ -412,6 +463,14 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
   const [animKey, setAnimKey] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-resize textarea to content height
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [current]);
+
   const questions = useMemo<Question[]>(() => [
     {
       key: "role",
@@ -482,9 +541,9 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
           </div>
         </div>
 
-        {/* Previous answers */}
+        {/* Previous answers — dimmed so the current question dominates visually */}
         {step > 0 && (
-          <div style={{ marginBottom: 32 }}>
+          <div style={{ marginBottom: 32, opacity: 0.5 }}>
             {questions.slice(0, step).map((pq, i) => (
               <div key={i} style={{
                 marginBottom: 10, padding: "10px 16px",
@@ -493,7 +552,7 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
                 animation: "fadeIn 0.4s ease forwards",
                 transition: "background 0.5s ease, border-color 0.5s ease",
               }}>
-                <div style={{ fontSize: 11, color: t.amber, letterSpacing: "0.08em", marginBottom: 3, opacity: 0.8 }}>
+                <div style={{ fontSize: 11, color: t.muted, letterSpacing: "0.08em", marginBottom: 3 }}>
                   {pq.eyebrow}
                 </div>
                 <div style={{ fontSize: 13, color: t.textDim, lineHeight: 1.6, transition: "color 0.5s ease" }}>
@@ -504,8 +563,13 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
           </div>
         )}
 
-        {/* Current question */}
-        <div key={animKey} style={{ animation: "fadeUp 0.5s ease forwards" }}>
+        {/* Current question — left-border framing mirrors the plan screen's accent treatment */}
+        <div key={animKey} style={{
+          animation: "fadeUp 0.5s ease forwards",
+          borderLeft: `2px solid ${t.amberBorder}`,
+          paddingLeft: 20,
+          transition: "border-color 0.5s ease",
+        }}>
           <div style={{
             fontSize: 12, color: t.amber, letterSpacing: "0.12em",
             marginBottom: 10, textTransform: "uppercase",
@@ -540,7 +604,6 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); }
             }}
             placeholder={q.ph}
-            rows={3}
             style={{
               width: "100%",
               background: current ? t.bgCardHover : t.inputBg,
@@ -550,6 +613,7 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
               outline: "none", resize: "none", caretColor: t.amber,
               transition: "all 0.3s ease",
               boxShadow: current ? `0 0 0 3px ${t.amberBg}` : "none",
+              minHeight: 96, overflow: "hidden",
             }}
           />
 
@@ -766,6 +830,13 @@ interface PlanScreenProps {
 const riskColor = (r: string, t: Theme): string =>
   r === "Low" ? t.sage : r === "Medium" ? t.amber : t.rose;
 
+// Semantic fit bar gradient: endpoint color communicates score quality at a glance.
+// ≥86% → sage (strong fit), 75–85% → amber (good fit), <75% → rose (possible fit)
+const fitBarGradient = (fit: number, t: Theme): string => {
+  const endpoint = fit >= 86 ? t.sage : fit >= 75 ? t.amber : t.rose;
+  return `linear-gradient(90deg, ${t.sage}, ${endpoint})`;
+};
+
 const PlanScreen = ({ result }: PlanScreenProps) => {
   const { t } = useTheme();
   const [tab, setTab] = useState<"paths" | "plan">("paths");
@@ -908,11 +979,21 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
                   borderRadius: 12, padding: "22px 24px", marginBottom: 14,
                   cursor: "pointer",
                   boxShadow: selPath === i
-                    ? `0 0 0 1px ${t.amberBorder}, 0 8px 32px rgba(0,0,0,0.08)`
-                    : "none",
+                    ? `0 0 0 1px ${t.amberBorder}, 0 8px 32px rgba(0,0,0,0.12)`
+                    : t.cardShadow,
                   transition: "all 0.3s ease",
                 }}
               >
+                {/* Top-accent stripe — color signals risk level at a glance */}
+                <div style={{
+                  height: 3,
+                  borderRadius: "11px 11px 0 0",
+                  marginTop: -22, marginLeft: -24, marginRight: -24, marginBottom: 18,
+                  background: riskColor(path.riskLevel, t),
+                  opacity: 0.55,
+                  transition: "background 0.5s ease",
+                }} />
+
                 {/* Top row */}
                 <div style={{
                   display: "flex", justifyContent: "space-between",
@@ -956,7 +1037,7 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
                   <div style={{ height: 3, background: t.border, borderRadius: 2 }}>
                     <div style={{
                       height: "100%", borderRadius: 2, width: `${path.fit}%`,
-                      background: `linear-gradient(90deg, ${t.sage}, ${t.amber})`,
+                      background: fitBarGradient(path.fit, t),
                       transition: "width 1.2s ease",
                     }} />
                   </div>
@@ -991,24 +1072,42 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
         {tab === "plan" && (
           <div style={{ animation: "fadeUp 0.4s ease forwards" }}>
 
-            {/* Active path pill */}
+            {/* Sticky active-path banner — stays visible as user scrolls 30/60/90 content.
+                Especially useful on mobile where the content is significantly longer. */}
             <div style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              background: t.amberBg, border: `1px solid ${t.amberBorder}`,
-              borderRadius: 24, padding: "6px 14px", marginBottom: 28, fontSize: 13,
+              position: "sticky", top: 0, zIndex: 10,
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 8, padding: "10px 16px", marginBottom: 24, marginLeft: -24, marginRight: -24,
+              background: t.amberBg,
+              borderBottom: `1px solid ${t.amberBorder}`,
+              backdropFilter: "blur(12px)",
               transition: "all 0.5s ease",
             }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: t.amber, boxShadow: `0 0 6px ${t.amber}`,
-              }} />
-              <span style={{ color: t.amber, fontWeight: 500 }}>{p.name}</span>
-              <span
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                  background: t.amber, boxShadow: `0 0 6px ${t.amber}`,
+                }} />
+                <span style={{ color: t.amber, fontWeight: 500, fontSize: 13 }}>{p.name}</span>
+                <span style={{
+                  fontSize: 11, color: t.muted, letterSpacing: "0.06em",
+                  padding: "2px 7px", border: `1px solid ${t.amberBorder}`,
+                  borderRadius: 4, background: "transparent",
+                }}>
+                  {p.type}
+                </span>
+              </div>
+              <button
                 onClick={() => setTab("paths")}
-                style={{ color: t.muted, fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                style={{
+                  background: "transparent", border: `1px solid ${t.amberBorder}`,
+                  borderRadius: 6, color: t.amber, fontSize: 11,
+                  padding: "4px 10px", cursor: "pointer", letterSpacing: "0.04em",
+                  transition: "all 0.2s ease",
+                }}
               >
-                change
-              </span>
+                change path
+              </button>
             </div>
 
             {/* First move */}
@@ -1085,6 +1184,90 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
             }}>
               <span style={{ color: t.rose, fontWeight: 500, transition: "color 0.5s ease" }}>⚠ Warning signal: </span>
               {result.plan.warning}
+            </div>
+
+            {/* Happiness Advantage */}
+            <div data-testid="happiness-advantage" style={{ marginBottom: 40 }}>
+              <div style={{
+                fontSize: 11, color: t.sage, letterSpacing: "0.18em",
+                textTransform: "uppercase", marginBottom: 16, fontWeight: 500,
+              }}>
+                The Happiness Advantage
+              </div>
+
+              {/* Glass half full */}
+              <div style={{
+                background: t.sageBg, border: `1px solid ${t.sageBorder}`,
+                borderRadius: 10, padding: "18px 22px", marginBottom: 12,
+                transition: "all 0.5s ease",
+              }}>
+                <div style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: 15, fontWeight: 600, color: t.text, marginBottom: 10,
+                  transition: "color 0.5s ease",
+                }}>
+                  {result.happinessAdvantage.glassHalfFull.headline}
+                </div>
+                {result.happinessAdvantage.glassHalfFull.wins.map((win, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, fontSize: 13, color: t.textDim }}>
+                    <span style={{ color: t.sage, flexShrink: 0 }}>✓</span>
+                    <span>{win}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Falling up */}
+              <div style={{
+                background: t.bgCard, border: `1px solid ${t.border}`,
+                borderLeft: `3px solid ${t.sage}`,
+                borderRadius: "0 8px 8px 0", padding: "14px 18px", marginBottom: 12,
+                fontSize: 13, color: t.textDim, lineHeight: 1.7,
+                fontStyle: "italic", transition: "all 0.5s ease",
+              }}>
+                {result.happinessAdvantage.fallingUp}
+              </div>
+
+              {/* Tetris effect */}
+              <div style={{
+                background: t.amberBg, border: `1px solid ${t.amberBorder}`,
+                borderRadius: 10, padding: "16px 20px", marginBottom: 12,
+                transition: "all 0.5s ease",
+              }}>
+                <div style={{ fontSize: 11, color: t.amber, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+                  Tetris Effect — train your brain to spot opportunity
+                </div>
+                <div style={{ fontSize: 13, color: t.textDim, lineHeight: 1.65, marginBottom: 6 }}>
+                  {result.happinessAdvantage.tetrisEffect.prompt}
+                </div>
+                <div style={{ fontSize: 12, color: t.muted, fontStyle: "italic" }}>
+                  e.g. {result.happinessAdvantage.tetrisEffect.example}
+                </div>
+              </div>
+
+              {/* Daily practice */}
+              <div style={{
+                background: t.bgCard, border: `1px solid ${t.border}`,
+                borderRadius: 10, padding: "16px 20px",
+                transition: "all 0.5s ease",
+              }}>
+                <div style={{ fontSize: 11, color: t.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 12 }}>
+                  Daily practice
+                </div>
+                {(["day30", "day60", "day90"] as const).map((k, i) => (
+                  <div key={k} style={{ display: "flex", gap: 12, marginBottom: i < 2 ? 10 : 0, fontSize: 13 }}>
+                    <span style={{ color: [t.amber, t.sage, t.textDim][i], fontWeight: 600, flexShrink: 0, width: 44 }}>
+                      {["D30", "D60", "D90"][i]}
+                    </span>
+                    <span style={{ color: t.textDim, lineHeight: 1.6 }}>
+                      {result.happinessAdvantage.dailyPractice[k]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 10, fontSize: 11, color: t.muted, textAlign: "right", fontStyle: "italic" }}>
+                {result.happinessAdvantage.attribution}
+              </div>
             </div>
 
             {/* Tip jar */}
@@ -1245,23 +1428,69 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
 };
 
 // ============================================================
+// ============================================================
+// ERROR SCREEN
+// ============================================================
+
+const ErrorScreen = ({ onRetry }: { onRetry: () => void }) => {
+  const { t } = useTheme();
+  return (
+    <div data-testid="error-screen" style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "2rem", textAlign: "center",
+    }}>
+      <div style={{ fontSize: "2.5rem", marginBottom: "1.25rem" }}>⚡</div>
+      <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.75rem", color: t.text, margin: "0 0 0.75rem" }}>
+        Oh snap.
+      </h2>
+      <p style={{ color: t.textDim, fontSize: "1rem", maxWidth: "360px", lineHeight: 1.6, margin: "0 0 2rem" }}>
+        We couldn&apos;t reach the analysis service. Check your connection and try again.
+      </p>
+      <button
+        data-testid="error-retry-btn"
+        onClick={onRetry}
+        style={{
+          background: t.btnPrimary, color: t.btnPrimaryText,
+          border: "none", borderRadius: "8px",
+          padding: "0.75rem 2rem", fontSize: "1rem",
+          fontWeight: 600, cursor: "pointer",
+        }}
+      >
+        Try again
+      </button>
+    </div>
+  );
+};
+
+// ============================================================
 // APP SHELL — Theme provider + screen router
 // ============================================================
 
-type Screen = "landing" | "intake" | "breathing" | "plan";
+type Screen = "landing" | "intake" | "breathing" | "plan" | "error";
 
 const bgPhaseMap: Record<Screen, BgPhase> = {
   landing:   "neutral",
   intake:    "neutral",
   breathing: "breathing",
+  error:     "neutral",
   plan:      "plan",
 };
 
 export default function Glitched() {
   const [isDark, setIsDark] = useState(true);
   const [screen, setScreen] = useState<Screen>("landing");
+  const [screenVisible, setScreenVisible] = useState(true);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [breathingDone, setBreathingDone] = useState(false);
+
+  const navigateTo = useCallback((next: Screen) => {
+    setScreenVisible(false);
+    setTimeout(() => {
+      setScreen(next);
+      setScreenVisible(true);
+    }, 280);
+  }, []);
 
   const t = isDark ? DARK : LIGHT;
   const toggle = () => setIsDark(d => !d);
@@ -1281,7 +1510,7 @@ export default function Glitched() {
   }, []);
 
   const handleIntakeSubmit = useCallback(async (answers: UserAnswers) => {
-    setScreen("breathing");
+    navigateTo("breathing");
     setBreathingDone(false);
 
     const useMock = process.env.NEXT_PUBLIC_USE_MOCK === "true";
@@ -1303,10 +1532,9 @@ export default function Glitched() {
       const data = (await res.json()) as AnalysisResult;
       setAnalysisResult(data);
     } catch {
-      // Fallback to mock data — never surface raw errors to users
-      setAnalysisResult(MOCK_RESULT);
+      navigateTo("error");
     }
-  }, []);
+  }, [navigateTo]);
 
   // Navigate to plan when BOTH breathing animation AND API are done
   const handleBreathingComplete = useCallback(() => {
@@ -1315,9 +1543,9 @@ export default function Glitched() {
 
   useEffect(() => {
     if (breathingDone && analysisResult !== null) {
-      setScreen("plan");
+      navigateTo("plan");
     }
-  }, [breathingDone, analysisResult]);
+  }, [breathingDone, analysisResult, navigateTo]);
 
   return (
     <ThemeCtx.Provider value={{ t, isDark, toggle }}>
@@ -1329,18 +1557,23 @@ export default function Glitched() {
         <AmbientBg phase={bgPhaseMap[screen]} />
         <ThemeToggle />
 
-        {screen === "landing"   && (
-          <LandingScreen onBegin={() => setScreen("intake")} />
-        )}
-        {screen === "intake"    && (
-          <IntakeScreen onSubmit={answers => { void handleIntakeSubmit(answers); }} />
-        )}
-        {screen === "breathing" && (
-          <BreathingScreen onComplete={handleBreathingComplete} />
-        )}
-        {screen === "plan" && analysisResult && (
-          <PlanScreen result={analysisResult} />
-        )}
+        <div style={{ opacity: screenVisible ? 1 : 0, transition: "opacity 0.28s ease" }}>
+          {screen === "landing"   && (
+            <LandingScreen onBegin={() => navigateTo("intake")} />
+          )}
+          {screen === "intake"    && (
+            <IntakeScreen onSubmit={answers => { void handleIntakeSubmit(answers); }} />
+          )}
+          {screen === "breathing" && (
+            <BreathingScreen onComplete={handleBreathingComplete} />
+          )}
+          {screen === "plan" && analysisResult && (
+            <PlanScreen result={analysisResult} />
+          )}
+          {screen === "error" && (
+            <ErrorScreen onRetry={() => navigateTo("intake")} />
+          )}
+        </div>
       </div>
     </ThemeCtx.Provider>
   );
