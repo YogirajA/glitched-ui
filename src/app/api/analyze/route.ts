@@ -44,8 +44,8 @@ function mapApiResponse(raw: RawApiResponse): AnalysisResult {
       timeToFirstRevenue: p.time_to_first_dollar,
       whyThisWorks:       p.why_this_works,
       biggestObstacle:    p.biggest_obstacle,
-      riskLevel:          p.risk_level,
-      effortLevel:        p.effort_level,
+      riskLevel:          p.risk_level as "Low" | "Medium" | "High",
+      effortLevel:        p.effort_level as "Low" | "Medium" | "High",
     })),
     plan: {
       firstMove: raw.plan.first_move,

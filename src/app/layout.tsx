@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Playfair_Display, DM_Sans } from "next/font/google";
+import { Cormorant_Garamond, Nunito } from "next/font/google";
 import "./globals.css";
 
-const playfair = Playfair_Display({
+const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
-  variable: "--font-playfair",
-  weight: ["400", "600", "700"],
+  variable: "--font-cormorant",
+  weight: ["300", "400", "500", "600"],
   style: ["normal", "italic"],
 });
 
-const dmSans = DM_Sans({
+const nunito = Nunito({
   subsets: ["latin"],
-  variable: "--font-dm-sans",
-  weight: ["300", "400", "500"],
+  variable: "--font-nunito",
+  weight: ["300", "400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${playfair.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${cormorant.variable} ${nunito.variable}`}>
       <body>{children}</body>
     </html>
   );
