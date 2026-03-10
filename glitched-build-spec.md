@@ -677,17 +677,47 @@ Rate limiter (5 req/IP/hr) blocks flooding before it reaches the pipeline.
 
 ---
 
-## 14. Deploy to Vercel
+## 14. Deploy to Railway
 
-```bash
-npm install -g vercel
-vercel
-```
+1. Push repo to GitHub
+2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
+3. Select the `glitched-ui` repo
+4. Railway auto-detects Next.js and builds it
 
-Follow prompts. Then add env vars in Vercel dashboard:
-`Settings → Environment Variables` — paste all from `.env.local`
+**Add env vars:**
+Railway dashboard → your service → Variables → add all from `.env.local`
 
-Custom domain: add `glitched.sh` in `Settings → Domains`
+**Note your Railway URL** (e.g. `your-app.up.railway.app`) — you'll need it for DNS.
+
+---
+
+## 14a. Custom Domain — DNSimple + Railway
+
+**Step 1 — Add DNS records in DNSimple:**
+
+| Type | Name | Content |
+|------|------|---------|
+| ALIAS | *(empty)* | `your-app.up.railway.app` |
+| CNAME | `www` | `your-app.up.railway.app` |
+
+**Step 2 — Add both domains in Railway:**
+
+Service → Settings → Networking → Custom Domain → add:
+- `glitched.sh`
+- `www.glitched.sh`
+
+Railway auto-provisions SSL for both.
+
+**Step 3 — www redirect (already in `next.config.ts`):**
+
+`www.glitched.sh` 301-redirects to `glitched.sh` via Next.js. DNS alone can't
+do this cleanly — the redirect lives in the app so the canonical is enforced at
+the HTTP level with the correct status code for SEO.
+
+Result:
+- `https://glitched.sh` — canonical ✅
+- `https://www.glitched.sh` → 301 → `https://glitched.sh` ✅
+- SSL on both ✅
 
 ---
 
@@ -698,7 +728,7 @@ Custom domain: add `glitched.sh` in `Settings → Domains`
 - [ ] Resend domain verified (for email deliverability)
 - [ ] Cloudflare Turnstile site created with localhost + production domain allowed
 - [ ] `.env.local` never committed to git
-- [ ] All env vars added to Vercel dashboard
+- [ ] All env vars added to Railway dashboard
 - [ ] Test full flow: intake → breathing → plan → tip → email
 - [ ] Test "← Start over" returns to landing with smooth fade
 - [ ] Test rate limit: 6th submission from same IP returns 429
@@ -712,7 +742,7 @@ Custom domain: add `glitched.sh` in `Settings → Domains`
 | Item | Cost |
 |------|------|
 | Domain `glitched.sh` | ~$35/yr |
-| Vercel Hobby | $0 |
+| Railway Hobby | ~$5/mo |
 | Anthropic API prepay | $50 |
 | Stripe | 2.9% + $0.30 per tip |
 | Resend free tier | $0 (3,000 emails/mo) |
