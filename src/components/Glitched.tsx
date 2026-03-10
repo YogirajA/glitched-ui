@@ -635,7 +635,8 @@ const LandingScreen = ({ onBegin }: LandingScreenProps) => {
 // SCREEN 2 — INTAKE
 // ============================================================
 interface IntakeScreenProps {
-  onSubmit: (answers: UserAnswers, captchaToken: string) => void;
+  onSubmit:     (answers: UserAnswers, captchaToken: string) => void;
+  isSubmitting: boolean;
 }
 
 interface Question {
@@ -646,7 +647,7 @@ interface Question {
   ph: string;
 }
 
-const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
+const IntakeScreen = ({ onSubmit, isSubmitting }: IntakeScreenProps) => {
   const { t } = useTheme();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<UserAnswers>({ role: "", want: "", fear: "" });
@@ -827,19 +828,19 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
             <button
               data-testid="continue-btn"
               onClick={next}
-              disabled={!current.trim() || (isLastStep && !captchaToken)}
+              disabled={!current.trim() || (isLastStep && !captchaToken) || isSubmitting}
               className="btn-primary"
               style={{
-                background: (current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimary : "transparent",
-                border: `1px solid ${(current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimary : t.border}`,
-                borderRadius: 8, color: (current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimaryText : t.muted,
+                background: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : "transparent",
+                border: `1px solid ${(current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : t.border}`,
+                borderRadius: 8, color: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimaryText : t.muted,
                 fontSize: 14, fontWeight: 500, padding: "12px 28px",
-                cursor: (current.trim() && (!isLastStep || captchaToken)) ? "pointer" : "not-allowed",
-                boxShadow: (current.trim() && (!isLastStep || captchaToken)) ? `0 4px 18px ${t.amberBg}` : "none",
+                cursor: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? "pointer" : "not-allowed",
+                boxShadow: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? `0 4px 18px ${t.amberBg}` : "none",
                 transition: "all 0.3s ease",
               }}
             >
-              {isLastStep ? "Build my plan →" : "Continue →"}
+              {isLastStep ? (isSubmitting ? "Analyzing…" : "Build my plan →") : "Continue →"}
             </button>
           </div>
         </div>
@@ -1666,6 +1667,7 @@ export default function Glitched() {
   const [screenVisible, setScreenVisible] = useState(true);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [breathingDone, setBreathingDone] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigateTo = useCallback((next: Screen) => {
@@ -1697,6 +1699,8 @@ export default function Glitched() {
   }, []);
 
   const handleIntakeSubmit = useCallback(async (answers: UserAnswers, captchaToken: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     navigateTo("breathing");
     setBreathingDone(false);
 
@@ -1706,6 +1710,7 @@ export default function Glitched() {
       // Simulate API latency so breathing screen plays naturally
       await new Promise<void>(r => setTimeout(r, 8000));
       setAnalysisResult(MOCK_RESULT);
+      setIsSubmitting(false);
       return;
     }
 
@@ -1720,8 +1725,10 @@ export default function Glitched() {
       setAnalysisResult(data);
     } catch {
       navigateTo("error");
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [navigateTo]);
+  }, [navigateTo, isSubmitting]);
 
   // Navigate to plan when BOTH breathing animation AND API are done
   const handleBreathingComplete = useCallback(() => {
@@ -1749,7 +1756,10 @@ export default function Glitched() {
             <LandingScreen onBegin={() => navigateTo("intake")} />
           )}
           {screen === "intake"    && (
-            <IntakeScreen onSubmit={(answers, token) => { void handleIntakeSubmit(answers, token); }} />
+            <IntakeScreen
+              onSubmit={(answers, token) => { void handleIntakeSubmit(answers, token); }}
+              isSubmitting={isSubmitting}
+            />
           )}
           {screen === "breathing" && (
             <BreathingScreen onComplete={handleBreathingComplete} />

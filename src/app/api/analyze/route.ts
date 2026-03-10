@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserAnswers, AnalysisResult } from "@/lib/types";
+import { analysisCache, buildCacheKey } from "@/lib/queryCache";
+import { checkRateLimit, extractIp } from "@/lib/rateLimit";
 
 // Typed mirror of the upstream snake_case API schema.
 interface RawMilestone { milestone: string; actions: string[]; success_indicator: string; }
@@ -103,6 +105,16 @@ async function verifyCaptcha(token: string): Promise<boolean> {
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Rate limit check (before any expensive work) ──────────
+    const ip = extractIp(req);
+    const rateLimitResult = checkRateLimit(ip);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests", retryAfter: rateLimitResult.retryAfterSeconds },
+        { status: 429, headers: { "Retry-After": String(rateLimitResult.retryAfterSeconds) } }
+      );
+    }
+
     const body = (await req.json()) as Partial<UserAnswers> & { captchaToken?: string };
     const { captchaToken, ...answers } = body;
 
@@ -119,6 +131,13 @@ export async function POST(req: NextRequest) {
       want: answers.want,
       fear: answers.fear,
     };
+
+    // ── Content cache check (after CAPTCHA, before pipeline) ──
+    const cacheKey = buildCacheKey(validAnswers);
+    const cached = analysisCache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
+    }
 
     // ── Mode 1: Forward to external private API ──────────────
     const agentsApiUrl = process.env.AGENTS_API_URL;
@@ -147,7 +166,8 @@ export async function POST(req: NextRequest) {
       }
 
       const result = mapApiResponse((await upstream.json()) as RawApiResponse);
-      return NextResponse.json(result);
+      analysisCache.set(cacheKey, result);
+      return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
     }
 
     // ── Mode 2: Local agents package (private npm) ───────────
@@ -162,7 +182,8 @@ export async function POST(req: NextRequest) {
         runAnalysisPipeline: (a: UserAnswers) => Promise<AnalysisResult>;
       };
       const result = await agents.runAnalysisPipeline(validAnswers);
-      return NextResponse.json(result);
+      analysisCache.set(cacheKey, result);
+      return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
     } catch (importErr: unknown) {
       const isModuleNotFound =
         importErr instanceof Error &&
