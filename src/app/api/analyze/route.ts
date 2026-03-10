@@ -88,9 +88,27 @@ function mapApiResponse(raw: RawApiResponse): AnalysisResult {
  */
 export const maxDuration = 60; // seconds — allow up to 60s for the multi-agent pipeline
 
+async function verifyCaptcha(token: string): Promise<boolean> {
+  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      secret: process.env.TURNSTILE_SECRET_KEY,
+      response: token,
+    }),
+  });
+  const data = (await res.json()) as { success: boolean };
+  return data.success;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const answers = (await req.json()) as Partial<UserAnswers>;
+    const body = (await req.json()) as Partial<UserAnswers> & { captchaToken?: string };
+    const { captchaToken, ...answers } = body;
+
+    if (!captchaToken || !(await verifyCaptcha(captchaToken))) {
+      return NextResponse.json({ error: "CAPTCHA verification failed." }, { status: 403 });
+    }
 
     if (!answers.role || !answers.want || !answers.fear) {
       return NextResponse.json({ error: "Missing answers" }, { status: 400 });

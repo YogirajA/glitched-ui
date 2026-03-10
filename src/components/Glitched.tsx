@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { AnalysisResult, UserAnswers } from "@/lib/types";
 import { MOCK_RESULT } from "@/lib/mock-data";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 // ============================================================
 // THEME SYSTEM
@@ -634,7 +635,7 @@ const LandingScreen = ({ onBegin }: LandingScreenProps) => {
 // SCREEN 2 — INTAKE
 // ============================================================
 interface IntakeScreenProps {
-  onSubmit: (answers: UserAnswers) => void;
+  onSubmit: (answers: UserAnswers, captchaToken: string) => void;
 }
 
 interface Question {
@@ -651,6 +652,7 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
   const [answers, setAnswers] = useState<UserAnswers>({ role: "", want: "", fear: "" });
   const [current, setCurrent] = useState("");
   const [animKey, setAnimKey] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
 
@@ -680,18 +682,21 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
 
   useEffect(() => { ref.current?.focus(); }, [step]);
 
+  const isLastStep = step === questions.length - 1;
+
   const next = useCallback(() => {
     if (!current.trim()) return;
+    if (isLastStep && !captchaToken) return;
     const updated: UserAnswers = { ...answers, [questions[step].key]: current };
     setAnswers(updated);
     setCurrent("");
-    if (step < questions.length - 1) {
+    if (!isLastStep) {
       setAnimKey(k => k + 1);
       setStep(s => s + 1);
     } else {
-      onSubmit(updated);
+      onSubmit(updated, captchaToken!);
     }
-  }, [current, answers, step, questions, onSubmit]);
+  }, [current, answers, step, questions, onSubmit, isLastStep, captchaToken]);
 
   const q = questions[step];
 
@@ -806,24 +811,35 @@ const IntakeScreen = ({ onSubmit }: IntakeScreenProps) => {
             }}
           />
 
+          {isLastStep && (
+            <Turnstile
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
+              onSuccess={setCaptchaToken}
+              onError={() => setCaptchaToken(null)}
+              onExpire={() => setCaptchaToken(null)}
+              options={{ appearance: "interaction-only", theme: "auto" }}
+              style={{ marginTop: 14 }}
+            />
+          )}
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
             <div style={{ fontSize: 12, color: t.muted }}>Press Enter to continue</div>
             <button
               data-testid="continue-btn"
               onClick={next}
-              disabled={!current.trim()}
+              disabled={!current.trim() || (isLastStep && !captchaToken)}
               className="btn-primary"
               style={{
-                background: current.trim() ? t.btnPrimary : "transparent",
-                border: `1px solid ${current.trim() ? t.btnPrimary : t.border}`,
-                borderRadius: 8, color: current.trim() ? t.btnPrimaryText : t.muted,
+                background: (current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimary : "transparent",
+                border: `1px solid ${(current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimary : t.border}`,
+                borderRadius: 8, color: (current.trim() && (!isLastStep || captchaToken)) ? t.btnPrimaryText : t.muted,
                 fontSize: 14, fontWeight: 500, padding: "12px 28px",
-                cursor: current.trim() ? "pointer" : "not-allowed",
-                boxShadow: current.trim() ? `0 4px 18px ${t.amberBg}` : "none",
+                cursor: (current.trim() && (!isLastStep || captchaToken)) ? "pointer" : "not-allowed",
+                boxShadow: (current.trim() && (!isLastStep || captchaToken)) ? `0 4px 18px ${t.amberBg}` : "none",
                 transition: "all 0.3s ease",
               }}
             >
-              {step < questions.length - 1 ? "Continue →" : "Build my plan →"}
+              {isLastStep ? "Build my plan →" : "Continue →"}
             </button>
           </div>
         </div>
@@ -1680,7 +1696,7 @@ export default function Glitched() {
     }
   }, []);
 
-  const handleIntakeSubmit = useCallback(async (answers: UserAnswers) => {
+  const handleIntakeSubmit = useCallback(async (answers: UserAnswers, captchaToken: string) => {
     navigateTo("breathing");
     setBreathingDone(false);
 
@@ -1697,7 +1713,7 @@ export default function Glitched() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(answers),
+        body: JSON.stringify({ ...answers, captchaToken }),
       });
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const data = (await res.json()) as AnalysisResult;
@@ -1733,7 +1749,7 @@ export default function Glitched() {
             <LandingScreen onBegin={() => navigateTo("intake")} />
           )}
           {screen === "intake"    && (
-            <IntakeScreen onSubmit={answers => { void handleIntakeSubmit(answers); }} />
+            <IntakeScreen onSubmit={(answers, token) => { void handleIntakeSubmit(answers, token); }} />
           )}
           {screen === "breathing" && (
             <BreathingScreen onComplete={handleBreathingComplete} />
