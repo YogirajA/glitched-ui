@@ -14,7 +14,8 @@
       "Bash(grep -v \"^$\")",
       "Bash(ls -la .env*)",
       "Bash(npm install @marsidev/react-turnstile)",
-      "Bash(npm list @marsidev/react-turnstile)"
+      "Bash(npm list @marsidev/react-turnstile)",
+      "Bash(npx next lint --help)"
     ]
   }
 }
