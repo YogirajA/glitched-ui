@@ -216,6 +216,42 @@ const GlobalStyle = ({ t, isDark, themeMode }: GlobalStyleProps) => (
     }
     .btn-primary:hover { transform: translateY(-2px); opacity: 0.92; }
     .btn-primary:active { transform: translateY(0); }
+
+    @media print {
+      * { animation: none !important; transition: none !important; }
+      body { background: #fff !important; color: #111 !important; font-size: 12pt; }
+
+      [data-testid="landing-screen"],
+      [data-testid="intake-screen"],
+      [data-testid="breathing-screen"],
+      [data-testid="error-screen"],
+      [data-testid="theme-toggle"],
+      [data-testid="start-over-btn"],
+      [data-testid="tip-jar"],
+      [data-testid="email-input"],
+      [data-testid="email-submit"],
+      [data-testid="email-success"],
+      [data-testid="print-btn"],
+      [data-print-hide="true"] { display: none !important; }
+
+      [data-testid="plan-screen"] {
+        padding: 0 !important;
+        min-height: auto !important;
+      }
+
+      [data-testid="path-card"] {
+        border: 1px solid #ccc !important;
+        break-inside: avoid;
+        background: #fff !important;
+        color: #111 !important;
+        margin-bottom: 16pt !important;
+      }
+
+      [data-print-show="all-paths"] { display: block !important; }
+
+      h1, h2, h3 { color: #111 !important; }
+      a { color: #111 !important; text-decoration: none; }
+    }
   `}</style>
 );
 
@@ -885,7 +921,7 @@ const BreathingScreen = ({ onComplete }: BreathingScreenProps) => {
     "Generating three honest paths...",
     "Building your 30 · 60 · 90 plan...",
     "Running integrity check...",
-    "Your plan is ready.",
+    "Your plan is cooking... almost there.",
   ], []);
 
   useEffect(() => {
@@ -1137,7 +1173,7 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
         </div>
 
         {/* Tabs */}
-        <div style={{
+        <div data-print-hide="true" style={{
           display: "flex", borderBottom: `1px solid ${t.border}`,
           marginBottom: 28, transition: "border-color 0.5s ease",
         }}>
@@ -1269,7 +1305,7 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
 
             {/* Sticky active-path banner — stays visible as user scrolls 30/60/90 content.
                 Especially useful on mobile where the content is significantly longer. */}
-            <div style={{
+            <div data-print-hide="true" style={{
               position: "sticky", top: 0, zIndex: 10,
               display: "flex", alignItems: "center", justifyContent: "space-between",
               gap: 8, padding: "10px 16px", marginBottom: 24, marginLeft: -24, marginRight: -24,
@@ -1618,13 +1654,35 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
         <div style={{
           marginTop: 60, paddingTop: 20,
           borderTop: `1px solid ${t.footerBorder}`,
-          display: "flex", justifyContent: "space-between",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
           flexWrap: "wrap", gap: 12,
           fontSize: 11, color: t.muted, letterSpacing: "0.05em",
           transition: "border-color 0.5s ease",
         }}>
           <span>GLITCHED · Built for the displaced</span>
-          <span style={{ color: t.amber, opacity: 0.7 }}>AWAF VERIFIED · glitched.sh</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              data-testid="print-btn"
+              onClick={() => { setTab("plan"); setTimeout(() => window.print(), 80); }}
+              style={{
+                background: "none", border: `1px solid ${t.border}`,
+                borderRadius: 6, cursor: "pointer",
+                fontSize: 11, color: t.muted, letterSpacing: "0.06em",
+                padding: "5px 12px", transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = t.amber;
+                (e.currentTarget as HTMLButtonElement).style.color = t.amber;
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = t.border;
+                (e.currentTarget as HTMLButtonElement).style.color = t.muted;
+              }}
+            >
+              ⎙ Print my plan
+            </button>
+            <span style={{ color: t.amber, opacity: 0.7 }}>AWAF VERIFIED · glitched.sh</span>
+          </div>
         </div>
       </div>
     </div>

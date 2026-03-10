@@ -3,6 +3,24 @@
 
 ---
 
+## Feature Status
+
+| Feature | Status |
+|---------|--------|
+| Landing → Intake → Breathing → Plan flow | ✅ Done |
+| 5-agent Claude pipeline (`@glitched/agents`) | ✅ Done |
+| Dual theme system (Dark / Light / Nexus) | ✅ Done |
+| Cloudflare Turnstile bot protection | ✅ Done |
+| Rate limiting (sliding window, per IP) | ✅ Done |
+| Query result cache (SHA-256 keyed, LRU/TTL) | ✅ Done |
+| Tip jar (Stripe one-time payment) | ✅ Done |
+| Email capture + welcome email (Resend) | ✅ Done |
+| Print my 30/60/90 plan | ✅ Done |
+| Keep my plan active (30-day refresh subscription) | 🔜 Coming soon |
+| Feature request / feedback | 🔜 Coming soon |
+
+---
+
 ## 1. Prerequisites
 
 ```bash
@@ -721,7 +739,42 @@ Result:
 
 ---
 
-## 15. Quick Checklist Before Launch
+## 15. Print My 30/60/90 Plan
+
+The plan screen includes a **"⎙ Print my plan"** button in the footer.
+
+**Behavior:**
+- Clicking the button switches to the Plan tab (if the user is on Paths), waits 80ms for the DOM to settle, then calls `window.print()`
+- Implemented via `data-testid="print-btn"` in `PlanScreen` footer
+
+**Print CSS** (`@media print` in `GlobalStyle`):
+
+Elements hidden during print:
+- All screens except `[data-testid="plan-screen"]`
+- `[data-testid="theme-toggle"]` — not relevant on paper
+- `[data-testid="start-over-btn"]` — not relevant on paper
+- `[data-testid="tip-jar"]` — no payments on paper
+- `[data-testid="email-input"]`, `[data-testid="email-submit"]`, `[data-testid="email-success"]`
+- `[data-testid="print-btn"]` itself
+- `[data-print-hide="true"]` — tabs nav, sticky path banner (used in Glitched.tsx to mark elements that are screen-only)
+
+Print styles:
+- `body` forced to white background, dark text, 12pt
+- `[data-testid="path-card"]` gets `break-inside: avoid` and a 1px `#ccc` border
+- All animations and transitions disabled
+
+**`data-print-hide="true"` usage in `Glitched.tsx`:**
+```tsx
+// Tabs nav — redundant on paper
+<div data-print-hide="true" style={{ display: "flex", ... }}>
+
+// Sticky "active path" banner + "change path" button — interactive, not for print
+<div data-print-hide="true" style={{ position: "sticky", ... }}>
+```
+
+---
+
+## 15a. Quick Checklist Before Launch
 
 - [ ] Anthropic API key funded ($50 minimum to start)
 - [ ] Stripe account live (not test mode)
@@ -734,19 +787,6 @@ Result:
 - [ ] Test rate limit: 6th submission from same IP returns 429
 - [ ] Test cache: same answers twice → second call returns `X-Cache: HIT` in network tab
 - [ ] Mobile responsive check (all inline styles use clamp + flexWrap)
-
----
-
-## 16. Total Launch Cost
-
-| Item | Cost |
-|------|------|
-| Domain `glitched.sh` | ~$35/yr |
-| Railway Hobby | ~$5/mo |
-| Anthropic API prepay | $50 |
-| Stripe | 2.9% + $0.30 per tip |
-| Resend free tier | $0 (3,000 emails/mo) |
-| **Total to launch** | **~$85** |
 
 ---
 
