@@ -116,36 +116,36 @@ const LIGHT: Theme = {
   cardShadow:     "0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05)",
 };
 
-// Nexus — indigo/teal/blue palette (one shade brighter than the brand guide)
+// Nexus — indigo/teal/blue palette (high-contrast for conference/print)
 const NEXUS: Theme = {
-  bg:             "#ECF0F6",
-  bgMid:          "#E1E7F2",
+  bg:             "#F5F7FA",
+  bgMid:          "#EAECF2",
   bgCard:         "#FFFFFF",
-  bgCardHover:    "#F6F7FF",
-  text:           "#1B1F3A",
-  textDim:        "#4A5178",
-  muted:          "rgba(27,31,58,0.42)",
-  amber:          "#6558E8",
-  amberDim:       "#4D41CC",
-  amberBg:        "rgba(101,88,232,0.07)",
-  amberBorder:    "rgba(101,88,232,0.28)",
-  sage:           "#18DDD9",
-  sageBg:         "rgba(24,221,217,0.08)",
-  sageBorder:     "rgba(24,221,217,0.3)",
-  rose:           "#5AA3FF",
-  roseBg:         "rgba(90,163,255,0.07)",
-  roseBorder:     "rgba(90,163,255,0.25)",
-  border:         "rgba(27,31,58,0.08)",
-  borderHover:    "rgba(101,88,232,0.32)",
-  scrollTrack:    "#ECF0F6",
-  scrollThumb:    "rgba(101,88,232,0.2)",
-  grad1:          "rgba(101,88,232,0.07)",
-  grad2:          "rgba(24,221,217,0.05)",
-  btnPrimary:     "#6558E8",
+  bgCardHover:    "#F4F6FF",
+  text:           "#111827",
+  textDim:        "#374151",
+  muted:          "rgba(17,24,39,0.45)",
+  amber:          "#4338CA",
+  amberDim:       "#3730A3",
+  amberBg:        "rgba(67,56,202,0.08)",
+  amberBorder:    "rgba(67,56,202,0.35)",
+  sage:           "#0E7490",
+  sageBg:         "rgba(14,116,144,0.09)",
+  sageBorder:     "rgba(14,116,144,0.35)",
+  rose:           "#1D4ED8",
+  roseBg:         "rgba(29,78,216,0.08)",
+  roseBorder:     "rgba(29,78,216,0.3)",
+  border:         "rgba(17,24,39,0.12)",
+  borderHover:    "rgba(67,56,202,0.4)",
+  scrollTrack:    "#F5F7FA",
+  scrollThumb:    "rgba(67,56,202,0.22)",
+  grad1:          "rgba(67,56,202,0.07)",
+  grad2:          "rgba(14,116,144,0.06)",
+  btnPrimary:     "#4338CA",
   btnPrimaryText: "#FFFFFF",
-  inputBg:        "rgba(255,255,255,0.9)",
-  footerBorder:   "rgba(27,31,58,0.07)",
-  cardShadow:     "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04)",
+  inputBg:        "rgba(255,255,255,0.95)",
+  footerBorder:   "rgba(17,24,39,0.09)",
+  cardShadow:     "0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06)",
 };
 
 interface ThemeCtxType {
@@ -218,8 +218,8 @@ const GlobalStyle = ({ t, isDark, themeMode }: GlobalStyleProps) => (
     .btn-primary:active { transform: translateY(0); }
 
     @media print {
-      * { animation: none !important; transition: none !important; opacity: 1 !important; }
-      body { background: #fff !important; color: #111 !important; font-size: 12pt; }
+      * { animation: none !important; transition: none !important; opacity: 1 !important; visibility: visible !important; }
+      body { background: #fff !important; color: #111 !important; font-size: 12pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
       [data-testid="landing-screen"],
       [data-testid="intake-screen"],
@@ -1099,8 +1099,13 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
   // Fire print only after React has re-rendered with tab="plan" in the DOM
   useEffect(() => {
     if (printPending && tab === "plan") {
-      window.print();
-      setPrintPending(false);
+      // Double rAF ensures layout/paint has fully settled before print dialog
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.print();
+          setPrintPending(false);
+        });
+      });
     }
   }, [printPending, tab]);
 
