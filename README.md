@@ -16,6 +16,7 @@ Frontend for [glitched.sh](https://glitched.sh) — a career pivot tool for disp
 | AI | Anthropic SDK (`claude-sonnet-4-20250514`) |
 | Payments | Stripe (tip jar) |
 | Email | Resend (plan refresh subscription) |
+| Bot protection | Cloudflare Turnstile |
 | Deploy | Vercel |
 
 ---
@@ -53,6 +54,12 @@ RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=hello@glitched.sh
 RESEND_AUDIENCE_ID=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Cloudflare Turnstile — bot protection on /api/analyze
+# dash.cloudflare.com → Security → Turnstile → create site
+# Add localhost + production domain to the site's allowed domains
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAAAAA...   # safe for client
+TURNSTILE_SECRET_KEY=0x4AAAAAAA...              # server only — never NEXT_PUBLIC_
 ```
 
 See [API Configuration](#api-configuration) below for the agent pipeline options.
@@ -232,7 +239,7 @@ npm install -g vercel
 vercel
 ```
 
-Add all env vars from `.env.local` in `Vercel Dashboard → Settings → Environment Variables`.
+Add all env vars from `.env.local` in `Vercel Dashboard → Settings → Environment Variables`. For Turnstile, also add your production domain to the site's allowed domains list in the Cloudflare dashboard.
 
 Custom domain: `Settings → Domains → glitched.sh`
 

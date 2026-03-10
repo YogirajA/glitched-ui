@@ -339,6 +339,12 @@ RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=hello@glitched.sh
 RESEND_AUDIENCE_ID=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Cloudflare Turnstile — bot protection on /api/analyze
+# dash.cloudflare.com → Security → Turnstile → create site
+# Add localhost + production domain to the site's allowed domains list
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAAAAA...   # safe for client
+TURNSTILE_SECRET_KEY=0x4AAAAAAA...              # server only — never NEXT_PUBLIC_
 ```
 
 In tests, mock all external services — never call real Anthropic/Stripe/Resend in test runs:
