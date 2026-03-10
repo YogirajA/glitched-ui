@@ -30,7 +30,7 @@ cd glitched
 
 When prompted:
 - TypeScript → **Yes**
-- Tailwind → **Yes**
+- Tailwind → **Yes** (installed but not used — UI uses inline styles only)
 - App Router → **Yes**
 - src/ directory → **Yes**
 
@@ -47,13 +47,10 @@ npm install resend
 
 # Payments
 npm install stripe @stripe/stripe-js
-
-# Animations (optional but nice)
-npm install framer-motion
-
-# Utilities
-npm install clsx
 ```
+
+> Note: No framer-motion or CSS modules. All animation is CSS keyframes via `<style>` tags.
+> Cloudflare Turnstile is loaded via CDN script tag — no npm package needed.
 
 ---
 
@@ -63,25 +60,29 @@ npm install clsx
 glitched/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx          ← root layout, fonts
-│   │   ├── page.tsx            ← renders <Glitched /> component
+│   │   ├── layout.tsx              ← root layout, fonts
+│   │   ├── page.tsx                ← renders <Glitched />
 │   │   ├── globals.css
 │   │   └── api/
 │   │       ├── analyze/
-│   │       │   └── route.ts    ← main Claude pipeline endpoint
+│   │       │   └── route.ts        ← rate limit → CAPTCHA → cache → pipeline
 │   │       ├── tip/
-│   │       │   └── route.ts    ← Stripe tip session
+│   │       │   └── route.ts        ← Stripe tip session
 │   │       └── subscribe/
-│   │           └── route.ts    ← Resend email capture
+│   │           └── route.ts        ← Resend email capture
 │   ├── components/
-│   │   └── Glitched.tsx       ← paste glitched.jsx here (renamed)
+│   │   └── Glitched.tsx            ← full UI, theme system, all 4 screens
 │   └── lib/
-│       ├── anthropic.ts        ← Claude client
-│       ├── agents.ts           ← 5-agent pipeline
-│       └── types.ts            ← shared TypeScript types
-├── .env.local                  ← secrets (never commit)
+│       ├── types.ts                ← shared TypeScript types
+│       ├── queryCache.ts           ← in-memory TTL + LRU cache
+│       └── rateLimit.ts            ← sliding-window IP rate limiter
+├── .env.local                      ← secrets (never commit)
 └── .gitignore
 ```
+
+> `src/lib/agents.ts` and `src/lib/anthropic.ts` are part of the private
+> `@glitched/agents` npm package. The analyze route imports from that package
+> at runtime (or forwards to an external API service — see Section 8).
 
 ---
 
@@ -90,8 +91,14 @@ glitched/
 Create `.env.local` in project root:
 
 ```bash
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+# Agent pipeline secret (used when AGENTS_API_URL is set)
+AGENTS_API_SECRET=thisissecret
+
+# Cloudflare Turnstile (bot/DDoS protection on /api/analyze)
+# Create a site at dash.cloudflare.com → Security → Turnstile
+# Add localhost + your production domain to allowed domains
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=0x4AAAAAAA...   # public — safe for client
+TURNSTILE_SECRET_KEY=0x4AAAAAAA...              # server only — never NEXT_PUBLIC_
 
 # Stripe (get from dashboard.stripe.com)
 STRIPE_SECRET_KEY=sk_test_...
@@ -100,9 +107,29 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
 # Resend (get from resend.com)
 RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=hello@glitched.sh
+RESEND_AUDIENCE_ID=...
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Rate limiting (server-side, per IP, sliding window)
+RATE_LIMIT_MAX=5         # max requests per window (default: 5)
+RATE_LIMIT_WINDOW_S=3600 # window size in seconds (default: 3600 = 1 hour)
+
+# Query result cache (in-memory, per instance)
+CACHE_TTL_HOURS=24       # how long to cache a result (default: 24)
+CACHE_MAX_ENTRIES=500    # max cached queries before LRU eviction (default: 500)
+
+# ── API MODE — controls where the analysis pipeline runs ──────────────────
+# Option 1 (default): Run pipeline via @glitched/agents local package.
+#   Install with: npm install ../glitched-agents
+#   Leave AGENTS_API_URL and NEXT_PUBLIC_USE_MOCK unset.
+
+# Option 2: Forward to an external private API service.
+# AGENTS_API_URL=https://api.glitched.sh
+
+# Option 3: Use mock data (dev/testing — no API calls made).
+# NEXT_PUBLIC_USE_MOCK=true
 ```
 
 > ⚠️ Add `.env.local` to `.gitignore` — it's there by default with create-next-app
@@ -155,7 +182,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ---
 
-## 7. The Claude Agent Pipeline
+## 7. Shared Types
 
 **`src/lib/types.ts`**
 ```typescript
@@ -186,6 +213,12 @@ export interface Path {
   fit: number;
 }
 
+export interface Milestone {
+  milestone: string;
+  actions: string[];
+  metric: string;
+}
+
 export interface Plan {
   firstMove: string;
   warning: string;
@@ -194,237 +227,272 @@ export interface Plan {
   day90: Milestone;
 }
 
-export interface Milestone {
-  milestone: string;
-  actions: string[];
-  metric: string;
+export interface HappinessAdvantage {
+  attribution: string;
+  glassHalfFull: {
+    headline: string;
+    wins: string[];
+  };
+  fallingUp: string;
+  dailyPractice: {
+    day30: string;
+    day60: string;
+    day90: string;
+  };
+  tetrisEffect: {
+    prompt: string;
+    example: string;
+  };
 }
 
 export interface AnalysisResult {
   profile: Profile;
   paths: Path[];
   plan: Plan;
-}
-```
-
-**`src/lib/anthropic.ts`**
-```typescript
-import Anthropic from "@anthropic-ai/sdk";
-
-// Single shared client — reused across all agents
-export const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-```
-
-**`src/lib/agents.ts`** — the 5-agent pipeline
-```typescript
-import { anthropic } from "./anthropic";
-import type { UserAnswers, Profile, Path, Plan, AnalysisResult } from "./types";
-
-// ── Agent 1: Parse intake into structured profile ──────────
-async function runIntakeAgent(answers: UserAnswers): Promise<Profile> {
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 800,
-    messages: [{
-      role: "user",
-      content: `You are the Intake Parser for Glitched — a platform for displaced professionals.
-Parse the user's raw answers into a structured profile.
-
-User answers:
-- Role/Experience: "${answers.role}"
-- What they want: "${answers.want}"
-- Their biggest fear: "${answers.fear}"
-
-Return ONLY valid JSON with this exact schema, no markdown, no preamble:
-{
-  "sector": "string (e.g. Finance, Tech, Marketing, Legal)",
-  "seniority": "Junior | Mid | Senior | Executive",
-  "transferableSkills": ["skill1", "skill2", "skill3"],
-  "primaryGoal": "Freedom | Income | Stability | Reinvention",
-  "coreAnxiety": "one sentence distillation of their fear",
-  "profileSummary": "2 sentences, empathetic but honest, no corporate speak"
-}`
-    }],
-  });
-
-  const text = (msg.content[0] as any).text;
-  return JSON.parse(text) as Profile;
-}
-
-// ── Agent 2: Market signal analysis ───────────────────────
-async function runMarketAgent(profile: Profile): Promise<object> {
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 600,
-    messages: [{
-      role: "user",
-      content: `You are the Market Signal Agent for Glitched.
-Profile: ${JSON.stringify(profile)}
-
-Analyze the current market reality for this person based on your knowledge of 2024-2025 trends.
-Return ONLY valid JSON, no markdown:
-{
-  "sectorHealth": "Contracting | Stable | Growing",
-  "aiDisruptionRisk": "High | Medium | Low",
-  "emergingOpportunities": ["opp1", "opp2", "opp3"],
-  "skillsInDemand": ["skill1", "skill2", "skill3"],
-  "timelineReality": "honest 1-2 sentence assessment"
-}`
-    }],
-  });
-
-  const text = (msg.content[0] as any).text;
-  return JSON.parse(text);
-}
-
-// ── Agent 3: Generate 3 paths ──────────────────────────────
-async function runPathAgent(profile: Profile, market: object): Promise<Path[]> {
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1200,
-    messages: [{
-      role: "user",
-      content: `You are the Path Generator for Glitched.
-Profile: ${JSON.stringify(profile)}
-Market signals: ${JSON.stringify(market)}
-
-Generate exactly 3 viable paths. Be specific to their profile. Be brutally honest about tradeoffs.
-Sort by fit score descending.
-Return ONLY valid JSON array, no markdown:
-[
-  {
-    "name": "compelling name for the path",
-    "type": "Freelance | Build | Invest | Pivot",
-    "timeToFirstRevenue": "e.g. 30-45 days",
-    "effortLevel": "Low | Medium | High",
-    "revenueRange": "e.g. $5k – $15k/mo",
-    "riskLevel": "Low | Medium | High",
-    "whyThisWorks": "2 sentences specific to their skills and situation",
-    "biggestObstacle": "1 honest sentence",
-    "fit": 85
-  }
-]`
-    }],
-  });
-
-  const text = (msg.content[0] as any).text;
-  return JSON.parse(text) as Path[];
-}
-
-// ── Agent 4: Build the 30/60/90 plan ──────────────────────
-async function runPlanAgent(profile: Profile, path: Path): Promise<Plan> {
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1200,
-    messages: [{
-      role: "user",
-      content: `You are the Plan Architect for Glitched.
-Profile: ${JSON.stringify(profile)}
-Chosen path: ${JSON.stringify(path)}
-
-Build a specific, actionable 30/60/90 day plan.
-Every action must be concrete — no "research options" or "consider networking."
-Return ONLY valid JSON, no markdown:
-{
-  "firstMove": "one specific action to do TODAY, small enough to do in 30 mins",
-  "warning": "one sentence: if this happens by day 30, pivot — be specific",
-  "day30": {
-    "milestone": "string",
-    "actions": ["action1", "action2", "action3"],
-    "metric": "measurable success indicator"
-  },
-  "day60": {
-    "milestone": "string",
-    "actions": ["action1", "action2", "action3"],
-    "metric": "measurable success indicator"
-  },
-  "day90": {
-    "milestone": "string",
-    "actions": ["action1", "action2", "action3"],
-    "metric": "measurable success indicator"
-  }
-}`
-    }],
-  });
-
-  const text = (msg.content[0] as any).text;
-  return JSON.parse(text) as Plan;
-}
-
-// ── Agent 5: AWAF compliance check ────────────────────────
-function runAwafCheck(result: AnalysisResult): boolean {
-  const { profile, paths, plan } = result;
-
-  // Schema completeness checks
-  if (!profile.sector || !profile.coreAnxiety || !profile.profileSummary) return false;
-  if (!paths || paths.length !== 3) return false;
-  if (paths.some(p => !p.name || !p.revenueRange || typeof p.fit !== "number")) return false;
-  if (!plan.firstMove || !plan.day30 || !plan.day60 || !plan.day90) return false;
-  if (plan.day30.actions.length < 2) return false;
-
-  // No hallucination check — revenue ranges must be realistic
-  const validRange = /\$[\d,k]+\s*[–-]\s*\$[\d,k]+/i;
-  if (paths.some(p => !validRange.test(p.revenueRange))) return false;
-
-  return true;
-}
-
-// ── Main pipeline: runs all agents in sequence ─────────────
-export async function runAnalysisPipeline(answers: UserAnswers): Promise<AnalysisResult> {
-  // Agent 1: Parse profile
-  const profile = await runIntakeAgent(answers);
-
-  // Agent 2: Market signals (runs in parallel with path prep)
-  const market = await runMarketAgent(profile);
-
-  // Agent 3: Generate paths
-  const paths = await runPathAgent(profile, market);
-
-  // Agent 4: Build plan for top-fit path
-  const plan = await runPlanAgent(profile, paths[0]);
-
-  const result: AnalysisResult = { profile, paths, plan };
-
-  // Agent 5: AWAF validation
-  const passed = runAwafCheck(result);
-  if (!passed) {
-    throw new Error("AWAF integrity check failed — retrying");
-    // In production: retry once, then surface error gracefully
-  }
-
-  return result;
+  happinessAdvantage: HappinessAdvantage;
 }
 ```
 
 ---
 
-## 8. API Routes
+## 8. Rate Limiting & Caching
+
+These two files are zero-infrastructure — pure in-memory, no Redis, no Upstash.
+
+> **Known tradeoff**: state resets on cold starts and is not shared across
+> concurrent Vercel instances. Acceptable for a serverless deploy.
+
+**`src/lib/rateLimit.ts`**
+```typescript
+type RateLimitResult =
+  | { allowed: true }
+  | { allowed: false; retryAfterSeconds: number };
+
+function getEnvInt(key: string, fallback: number): number {
+  const val = process.env[key];
+  if (!val) return fallback;
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const ipTimestamps = new Map<string, number[]>();
+
+export function checkRateLimit(ip: string): RateLimitResult {
+  const max      = getEnvInt('RATE_LIMIT_MAX', 5);
+  const windowS  = getEnvInt('RATE_LIMIT_WINDOW_S', 3600);
+
+  const nowS = Math.floor(Date.now() / 1000);
+  const windowStart = nowS - windowS;
+
+  const existing = ipTimestamps.get(ip) ?? [];
+  const inWindow = existing.filter(ts => ts > windowStart);
+
+  if (inWindow.length >= max) {
+    const oldest = Math.min(...inWindow);
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(oldest + windowS - nowS, 1),
+    };
+  }
+
+  inWindow.push(nowS);
+  ipTimestamps.set(ip, inWindow);
+
+  // Cleanup IPs with no timestamps in the current window
+  for (const [storedIp, timestamps] of ipTimestamps) {
+    if (timestamps.every(ts => ts <= windowStart)) ipTimestamps.delete(storedIp);
+  }
+
+  return { allowed: true };
+}
+
+export function extractIp(req: { headers: { get(name: string): string | null } }): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return 'unknown';
+}
+```
+
+**`src/lib/queryCache.ts`**
+```typescript
+import { createHash } from 'crypto';
+import type { UserAnswers, AnalysisResult } from '@/lib/types';
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number; // Unix ms
+}
+
+class TtlCache<T> {
+  private readonly store = new Map<string, CacheEntry<T>>();
+  private readonly ttlMs: number;
+  private readonly maxSize: number;
+
+  constructor(ttlMs: number, maxSize: number) {
+    this.ttlMs = ttlMs;
+    this.maxSize = maxSize;
+  }
+
+  get(key: string): T | null {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
+
+  set(key: string, value: T): void {
+    if (this.store.size >= this.maxSize && !this.store.has(key)) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey !== undefined) this.store.delete(oldestKey);
+    }
+    this.store.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+  }
+}
+
+function getEnvInt(key: string, fallback: number): number {
+  const val = process.env[key];
+  if (!val) return fallback;
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export const analysisCache = new TtlCache<AnalysisResult>(
+  getEnvInt('CACHE_TTL_HOURS', 24) * 60 * 60 * 1000,
+  getEnvInt('CACHE_MAX_ENTRIES', 500)
+);
+
+export function buildCacheKey(answers: UserAnswers): string {
+  const normalized = [answers.role, answers.want, answers.fear]
+    .map(s => s.trim().toLowerCase())
+    .join('|');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+```
+
+---
+
+## 9. API Routes
 
 **`src/app/api/analyze/route.ts`**
+
+Request pipeline order: **Rate Limit → CAPTCHA → Content Cache → Agent Pipeline → Cache Store**
+
 ```typescript
 import { NextRequest, NextResponse } from "next/server";
-import { runAnalysisPipeline } from "@/lib/agents";
+import type { UserAnswers, AnalysisResult } from "@/lib/types";
+import { analysisCache, buildCacheKey } from "@/lib/queryCache";
+import { checkRateLimit, extractIp } from "@/lib/rateLimit";
+
+export const maxDuration = 60; // seconds — allow up to 60s for the multi-agent pipeline
+
+async function verifyCaptcha(token: string): Promise<boolean> {
+  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      secret: process.env.TURNSTILE_SECRET_KEY,
+      response: token,
+    }),
+  });
+  const data = (await res.json()) as { success: boolean };
+  return data.success;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const answers = await req.json();
+    // 1. Rate limit (before any expensive work)
+    const ip = extractIp(req);
+    const rateLimitResult = checkRateLimit(ip);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests", retryAfter: rateLimitResult.retryAfterSeconds },
+        { status: 429, headers: { "Retry-After": String(rateLimitResult.retryAfterSeconds) } }
+      );
+    }
 
-    // Basic validation
+    const body = (await req.json()) as Partial<UserAnswers> & { captchaToken?: string };
+    const { captchaToken, ...answers } = body;
+
+    // 2. CAPTCHA (before cache — bots shouldn't probe the cache for free)
+    if (!captchaToken || !(await verifyCaptcha(captchaToken))) {
+      return NextResponse.json({ error: "CAPTCHA verification failed." }, { status: 403 });
+    }
+
     if (!answers.role || !answers.want || !answers.fear) {
       return NextResponse.json({ error: "Missing answers" }, { status: 400 });
     }
 
-    const result = await runAnalysisPipeline(answers);
-    return NextResponse.json(result);
+    const validAnswers: UserAnswers = {
+      role: answers.role,
+      want: answers.want,
+      fear: answers.fear,
+    };
 
-  } catch (err: any) {
-    console.error("Analysis pipeline error:", err);
-    return NextResponse.json(
-      { error: "Analysis failed. Please try again." },
-      { status: 500 }
-    );
+    // 3. Content cache
+    const cacheKey = buildCacheKey(validAnswers);
+    const cached = analysisCache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "X-Cache": "HIT" } });
+    }
+
+    // 4a. Mode: Forward to external private API (AGENTS_API_URL set)
+    const agentsApiUrl = process.env.AGENTS_API_URL;
+    if (agentsApiUrl) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 55_000);
+      let upstream: Response;
+      try {
+        upstream = await fetch(`${agentsApiUrl}/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(process.env.AGENTS_API_SECRET
+              ? { "x-api-key": process.env.AGENTS_API_SECRET }
+              : {}),
+          },
+          body: JSON.stringify(validAnswers),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!upstream.ok) throw new Error(`Upstream API error: ${upstream.status}`);
+      const result = (await upstream.json()) as AnalysisResult;
+      analysisCache.set(cacheKey, result);
+      return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
+    }
+
+    // 4b. Mode: Local @glitched/agents package
+    try {
+      // eslint-disable-next-line no-new-func
+      const agents = (await new Function('return import("@glitched/agents")')()) as {
+        runAnalysisPipeline: (a: UserAnswers) => Promise<AnalysisResult>;
+      };
+      const result = await agents.runAnalysisPipeline(validAnswers);
+      analysisCache.set(cacheKey, result);
+      return NextResponse.json(result, { headers: { "X-Cache": "MISS" } });
+    } catch (importErr: unknown) {
+      const isModuleNotFound =
+        importErr instanceof Error &&
+        (importErr.message.includes("Cannot find module") ||
+          importErr.message.includes("Cannot find package") ||
+          ("code" in importErr && (importErr as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND"));
+
+      if (!isModuleNotFound) throw importErr;
+
+      return NextResponse.json(
+        { error: "Agent pipeline not configured. Set AGENTS_API_URL or install @glitched/agents." },
+        { status: 503 }
+      );
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[analyze]", message);
+    return NextResponse.json({ error: "Analysis failed. Please try again." }, { status: 500 });
   }
 }
 ```
@@ -440,14 +508,12 @@ export async function POST(req: NextRequest) {
   try {
     const { email } = await req.json();
 
-    // Add to your audience
     await resend.contacts.create({
       email,
       audienceId: process.env.RESEND_AUDIENCE_ID!,
       unsubscribed: false,
     });
 
-    // Send welcome email
     await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL!,
       to: email,
@@ -510,40 +576,82 @@ export async function POST(req: NextRequest) {
 
 ---
 
-## 9. Connect the UI to Real APIs
+## 10. The Agent Pipeline (Private Package)
 
-Replace the mock data flow in `Glitched.tsx`.
+The 5-agent Claude pipeline lives in the private `@glitched/agents` npm package
+(separate repo). The pipeline is:
 
-In the **IntakeScreen** `onSubmit` handler, instead of going straight to `"breathing"`, call the API:
+```
+IntakeAgent → MarketAgent → PathAgent → PlanAgent → AWAFCheck
+```
+
+To use locally, install the package from its directory:
+```bash
+npm install ../glitched-agents
+```
+
+Or set `AGENTS_API_URL` to point to a deployed instance of the private API.
+
+For development/testing without the package, set `NEXT_PUBLIC_USE_MOCK=true` —
+the breathing screen still plays, and mock data is returned client-side.
+
+Agent rules (enforced in the private package):
+- Model is always `claude-sonnet-4-20250514` — never change this
+- All agents return strict JSON only — no markdown, no preamble
+- AWAFCheck validates schema completeness before any result renders
+- Agent prompts are core IP — never log to console in production
+
+---
+
+## 11. Connect the UI to Real APIs
+
+`Glitched.tsx` handles three modes automatically via env vars. The intake submit
+flow sends `captchaToken` alongside answers:
 
 ```typescript
-// In Glitched.tsx — add state at app level
+// In Glitched component — key state
 const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+const [isSubmitting, setIsSubmitting] = useState(false);
 
-// When intake completes:
-const handleIntakeSubmit = async (answers: UserAnswers) => {
-  setScreen("breathing"); // show breathing immediately
+// handleIntakeSubmit — called when user completes 3 questions
+const handleIntakeSubmit = async (answers: UserAnswers, captchaToken: string) => {
+  if (isSubmitting) return;           // guard against double-submit
+  setIsSubmitting(true);
+  navigateTo("breathing");            // show breathing immediately
+  setBreathingDone(false);
+
   try {
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(answers),
+      body: JSON.stringify({ ...answers, captchaToken }),
     });
+    if (!res.ok) throw new Error(`API error ${res.status}`);
     const data = await res.json();
-    setAnalysisResult(data); // ready by the time breathing ends (~20s)
-  } catch (err) {
-    console.error(err);
-    // Fallback to mock data in dev
-    setAnalysisResult(MOCK_FALLBACK);
+    setAnalysisResult(data);          // ready by the time breathing ends (~20s)
+  } catch {
+    navigateTo("error");
+  } finally {
+    setIsSubmitting(false);
   }
+};
+
+// handleStartOver — called from plan screen "← Start over" button
+const handleStartOver = () => {
+  setAnalysisResult(null);
+  setBreathingDone(false);
+  setIsSubmitting(false);
+  navigateTo("landing");              // smooth 280ms fade, no page refresh
 };
 ```
 
-The breathing animation takes ~20 seconds — Claude typically responds in 8-15 seconds. **They finish at roughly the same time.** No loading spinner needed. The breathing screen IS the loading screen.
+The breathing animation takes ~20 seconds — Claude typically responds in 8-15 seconds.
+**They finish at roughly the same time.** No loading spinner needed.
+The breathing screen IS the loading screen.
 
 ---
 
-## 10. Run Locally
+## 12. Run Locally
 
 ```bash
 npm run dev
@@ -553,7 +661,7 @@ Open: http://localhost:3000
 
 ---
 
-## 11. Cost Estimate Per Run
+## 13. Cost Estimate Per Run
 
 | Agent | Avg tokens | Cost |
 |-------|-----------|------|
@@ -564,11 +672,12 @@ Open: http://localhost:3000
 | **Total per user** | | **~$0.016** |
 
 At 1,000 free runs/month: **~$16 in API costs.**
-Add caching for repeat profiles → cut that by 40%.
+Content cache (24h TTL, SHA-256 keyed on inputs) eliminates repeat costs.
+Rate limiter (5 req/IP/hr) blocks flooding before it reaches the pipeline.
 
 ---
 
-## 12. Deploy to Vercel
+## 14. Deploy to Vercel
 
 ```bash
 npm install -g vercel
@@ -582,19 +691,23 @@ Custom domain: add `glitched.sh` in `Settings → Domains`
 
 ---
 
-## 13. Quick Checklist Before Launch
+## 15. Quick Checklist Before Launch
 
 - [ ] Anthropic API key funded ($50 minimum to start)
 - [ ] Stripe account live (not test mode)
 - [ ] Resend domain verified (for email deliverability)
+- [ ] Cloudflare Turnstile site created with localhost + production domain allowed
 - [ ] `.env.local` never committed to git
-- [ ] AWAF badge visible on all screens
+- [ ] All env vars added to Vercel dashboard
 - [ ] Test full flow: intake → breathing → plan → tip → email
-- [ ] Mobile responsive check (it is — all inline styles use clamp + flexWrap)
+- [ ] Test "← Start over" returns to landing with smooth fade
+- [ ] Test rate limit: 6th submission from same IP returns 429
+- [ ] Test cache: same answers twice → second call returns `X-Cache: HIT` in network tab
+- [ ] Mobile responsive check (all inline styles use clamp + flexWrap)
 
 ---
 
-## 14. Total Launch Cost
+## 16. Total Launch Cost
 
 | Item | Cost |
 |------|------|

@@ -1031,6 +1031,7 @@ const BreathingScreen = ({ onComplete }: BreathingScreenProps) => {
 // ============================================================
 interface PlanScreenProps {
   result: AnalysisResult;
+  onStartOver: () => void;
 }
 
 const riskColor = (r: string, t: Theme): string =>
@@ -1043,7 +1044,7 @@ const fitBarGradient = (fit: number, t: Theme): string => {
   return `linear-gradient(90deg, ${t.sage}, ${endpoint})`;
 };
 
-const PlanScreen = ({ result }: PlanScreenProps) => {
+const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
   const { t } = useTheme();
   const [tab, setTab] = useState<"paths" | "plan">("paths");
   const [selPath, setSelPath] = useState(0);
@@ -1089,10 +1090,29 @@ const PlanScreen = ({ result }: PlanScreenProps) => {
         {/* Header */}
         <div style={{ marginBottom: 36, animation: "fadeUp 0.6s ease forwards" }}>
           <div style={{
-            fontSize: 11, color: t.amber, letterSpacing: "0.22em",
-            textTransform: "uppercase", marginBottom: 12, opacity: 0.8,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 12,
           }}>
-            Your Exit Protocol
+            <div style={{
+              fontSize: 11, color: t.amber, letterSpacing: "0.22em",
+              textTransform: "uppercase", opacity: 0.8,
+            }}>
+              Your Exit Protocol
+            </div>
+            <button
+              data-testid="start-over-btn"
+              onClick={onStartOver}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 12, color: t.textDim, opacity: 0.5,
+                letterSpacing: "0.04em", padding: 0,
+                transition: "opacity 0.2s ease",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
+            >
+              ← Start over
+            </button>
           </div>
           <h1 style={{
             fontFamily: "'Fraunces', serif",
@@ -1731,6 +1751,13 @@ export default function Glitched() {
   }, [navigateTo, isSubmitting]);
 
   // Navigate to plan when BOTH breathing animation AND API are done
+  const handleStartOver = useCallback(() => {
+    setAnalysisResult(null);
+    setBreathingDone(false);
+    setIsSubmitting(false);
+    navigateTo("landing");
+  }, [navigateTo]);
+
   const handleBreathingComplete = useCallback(() => {
     setBreathingDone(true);
   }, []);
@@ -1765,7 +1792,7 @@ export default function Glitched() {
             <BreathingScreen onComplete={handleBreathingComplete} />
           )}
           {screen === "plan" && analysisResult && (
-            <PlanScreen result={analysisResult} />
+            <PlanScreen result={analysisResult} onStartOver={handleStartOver} />
           )}
           {screen === "error" && (
             <ErrorScreen onRetry={() => navigateTo("intake")} />
