@@ -15,7 +15,9 @@
       "Bash(ls -la .env*)",
       "Bash(npm install @marsidev/react-turnstile)",
       "Bash(npm list @marsidev/react-turnstile)",
-      "Bash(npx next lint --help)"
+      "Bash(npx next lint --help)",
+      "WebFetch(domain:dribbble.com)",
+      "Bash(curl -s 'https://dribbble.com/shots/24526022-Font-Awesome-Sharp-Duotone' -H 'User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36')"
     ]
   }
 }

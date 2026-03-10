@@ -116,36 +116,39 @@ const LIGHT: Theme = {
   cardShadow:     "0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.05)",
 };
 
-// Nexus — indigo/teal/blue palette (high-contrast for conference/print)
+// Nexus — Font Awesome inspired: vivid purple + duotone green + teal
 const NEXUS: Theme = {
-  bg:             "#F5F7FA",
-  bgMid:          "#EAECF2",
-  bgCard:         "#FFFFFF",
-  bgCardHover:    "#F4F6FF",
-  text:           "#111827",
-  textDim:        "#374151",
-  muted:          "rgba(17,24,39,0.45)",
-  amber:          "#4338CA",
-  amberDim:       "#3730A3",
-  amberBg:        "rgba(67,56,202,0.08)",
-  amberBorder:    "rgba(67,56,202,0.35)",
-  sage:           "#0E7490",
-  sageBg:         "rgba(14,116,144,0.09)",
-  sageBorder:     "rgba(14,116,144,0.35)",
-  rose:           "#1D4ED8",
-  roseBg:         "rgba(29,78,216,0.08)",
-  roseBorder:     "rgba(29,78,216,0.3)",
-  border:         "rgba(17,24,39,0.12)",
-  borderHover:    "rgba(67,56,202,0.4)",
-  scrollTrack:    "#F5F7FA",
-  scrollThumb:    "rgba(67,56,202,0.22)",
-  grad1:          "rgba(67,56,202,0.07)",
-  grad2:          "rgba(14,116,144,0.06)",
-  btnPrimary:     "#4338CA",
+  bg:             "#FFFFFF",   // pure white — FA homepage aesthetic
+  bgMid:          "#F6F7FA",   // barely-there section bg
+  bgCard:         "#FFFFFF",   // white cards
+  bgCardHover:    "#F6F7FA",   // neutral hover
+  text:           "#1A1B3E",   // deep navy-purple — FA headline color
+  textDim:        "#374151",   // gray-700 — clear body text
+  muted:          "rgba(26,27,62,0.48)",
+  // PRIMARY — vivid purple: FA brand purple (#5436D4)
+  amber:          "#5436D4",
+  amberDim:       "#4327B8",
+  amberBg:        "rgba(84,54,212,0.08)",
+  amberBorder:    "rgba(84,54,212,0.24)",
+  // SUCCESS — FA duotone dark green
+  sage:           "#2A6B50",
+  sageBg:         "rgba(168,212,188,0.40)",  // FA ghost-green duotone fill
+  sageBorder:     "rgba(42,107,80,0.28)",
+  // EMPHASIS — FA teal (tooltip color)
+  rose:           "#0D8C85",
+  roseBg:         "rgba(13,140,133,0.08)",
+  roseBorder:     "rgba(13,140,133,0.25)",
+  border:         "rgba(26,27,62,0.09)",
+  borderHover:    "rgba(84,54,212,0.36)",
+  scrollTrack:    "#F6F7FA",
+  scrollThumb:    "rgba(84,54,212,0.18)",
+  grad1:          "rgba(84,54,212,0.04)",   // purple ambient
+  grad2:          "rgba(42,107,80,0.03)",   // green ambient
+  btnPrimary:     "#5436D4",
   btnPrimaryText: "#FFFFFF",
-  inputBg:        "rgba(255,255,255,0.95)",
-  footerBorder:   "rgba(17,24,39,0.09)",
-  cardShadow:     "0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06)",
+  inputBg:        "#FFFFFF",
+  footerBorder:   "rgba(26,27,62,0.08)",
+  cardShadow:     "0 0 0 1px rgba(26,27,62,0.06), 0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)",
 };
 
 interface ThemeCtxType {
@@ -272,12 +275,12 @@ const ThemeToggle = () => {
       mode: "nexus",
       title: "Nexus theme",
       icon: (
-        // 4-color grid representing the nexus palette
+        // 4-color grid representing the nexus teal/emerald/blue palette
         <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
-          <rect x="0" y="0" width="5.5" height="5.5" rx="1.5" fill="#6558E8"/>
-          <rect x="6.5" y="0" width="5.5" height="5.5" rx="1.5" fill="#9B8FFF"/>
-          <rect x="0" y="6.5" width="5.5" height="5.5" rx="1.5" fill="#5AA3FF"/>
-          <rect x="6.5" y="6.5" width="5.5" height="5.5" rx="1.5" fill="#18DDD9"/>
+          <rect x="0" y="0" width="5.5" height="5.5" rx="1.5" fill="#5436D4"/>
+          <rect x="6.5" y="0" width="5.5" height="5.5" rx="1.5" fill="#2A6B50"/>
+          <rect x="0" y="6.5" width="5.5" height="5.5" rx="1.5" fill="#0D8C85"/>
+          <rect x="6.5" y="6.5" width="5.5" height="5.5" rx="1.5" fill="#5436D4" opacity="0.50"/>
         </svg>
       ),
     },
@@ -568,35 +571,55 @@ const LandingScreen = ({ onBegin }: LandingScreenProps) => {
             }}>
               How it works
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {[
                 {
                   step: "01",
                   title: "Three honest questions",
                   body: "What did you do, what do you want, what scares you. No résumé upload. No skills quiz. Just the real stuff.",
+                  icon: (
+                    // Sharp Duotone: speech bubble with lines
+                    <svg width="36" height="36" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+                      <rect x="1" y="1" width="18" height="13" rx="2" fill={t.amberBg} stroke={t.amber} strokeWidth="1.5"/>
+                      <rect x="4" y="5" width="8" height="1.5" rx="0.5" fill={t.amber}/>
+                      <rect x="4" y="8" width="11" height="1.5" rx="0.5" fill={t.amber} opacity="0.5"/>
+                      <path d="M4 14L3.5 17.5L7.5 14Z" fill={t.amber}/>
+                    </svg>
+                  ),
                 },
                 {
                   step: "02",
                   title: "A 5-agent AI pipeline runs",
                   body: "Five specialized models analyze your answers in sequence, profiling your market, mapping viable paths, and stress-testing the plan before you see it.",
+                  icon: (
+                    // Sharp Duotone: branching pipeline nodes
+                    <svg width="36" height="36" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+                      <rect x="7" y="1" width="6" height="6" rx="1.5" fill={t.amberBg} stroke={t.amber} strokeWidth="1.5"/>
+                      <line x1="10" y1="7" x2="4" y2="13" stroke={t.amber} strokeWidth="1.5" strokeLinecap="square"/>
+                      <line x1="10" y1="7" x2="16" y2="13" stroke={t.amber} strokeWidth="1.5" strokeLinecap="square" opacity="0.6"/>
+                      <rect x="1" y="13" width="6" height="6" rx="1.5" fill={t.amber}/>
+                      <rect x="13" y="13" width="6" height="6" rx="1.5" fill={t.amber} opacity="0.5"/>
+                    </svg>
+                  ),
                 },
                 {
                   step: "03",
                   title: "Your 30/60/90 plan",
                   body: "Three ranked paths with revenue ranges, effort levels, and a concrete day-by-day action plan built for your specific situation. Not a template.",
+                  icon: (
+                    // Sharp Duotone: ascending bar chart
+                    <svg width="36" height="36" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+                      <rect x="1" y="12" width="5" height="7" rx="1" fill={t.amberBg} stroke={t.amber} strokeWidth="1.5"/>
+                      <rect x="7.5" y="7" width="5" height="12" rx="1" fill={t.amber} opacity="0.55"/>
+                      <rect x="14" y="2" width="5" height="17" rx="1" fill={t.amber}/>
+                    </svg>
+                  ),
                 },
-              ].map(({ step, title, body }) => (
+              ].map(({ step, title, body, icon }) => (
                 <div key={step} style={{
-                  display: "flex", gap: 20, alignItems: "flex-start",
+                  display: "flex", gap: 18, alignItems: "flex-start",
                 }}>
-                  <div style={{
-                    fontSize: 11, color: t.amber, fontWeight: 600,
-                    letterSpacing: "0.1em", opacity: 0.6,
-                    flexShrink: 0, paddingTop: 2,
-                    transition: "color 0.5s ease",
-                  }}>
-                    {step}
-                  </div>
+                  {icon}
                   <div>
                     <div style={{
                       fontSize: 15, fontWeight: 600, color: t.text,
