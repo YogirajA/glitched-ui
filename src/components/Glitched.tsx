@@ -218,7 +218,7 @@ const GlobalStyle = ({ t, isDark, themeMode }: GlobalStyleProps) => (
     .btn-primary:active { transform: translateY(0); }
 
     @media print {
-      * { animation: none !important; transition: none !important; }
+      * { animation: none !important; transition: none !important; opacity: 1 !important; }
       body { background: #fff !important; color: #111 !important; font-size: 12pt; }
 
       [data-testid="landing-screen"],
