@@ -232,6 +232,8 @@ const GlobalStyle = ({ t, isDark, themeMode }: GlobalStyleProps) => (
       [data-testid="email-submit"],
       [data-testid="email-success"],
       [data-testid="print-btn"],
+      [data-testid="happiness-advantage"],
+      [data-ambient-bg="true"],
       [data-print-hide="true"] { display: none !important; }
 
       [data-testid="plan-screen"] {
@@ -249,8 +251,12 @@ const GlobalStyle = ({ t, isDark, themeMode }: GlobalStyleProps) => (
 
       [data-print-show="all-paths"] { display: block !important; }
 
-      h1, h2, h3 { color: #111 !important; }
+      /* Force readable colors on all text elements */
+      h1, h2, h3, p, span, div { color: #111 !important; background: transparent !important; }
       a { color: #111 !important; text-decoration: none; }
+
+      /* Day 30/60/90 sections — keep left border accent, avoid page splits */
+      [data-testid="plan-screen"] > div > div { break-inside: avoid; }
     }
   `}</style>
 );
@@ -365,7 +371,7 @@ const AmbientBg = ({ phase }: AmbientBgProps) => {
   return (
     <>
       {/* Radial gradient layer */}
-      <div style={{
+      <div data-ambient-bg="true" style={{
         position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
         background: `
           radial-gradient(ellipse 65% 55% at 15% 25%, ${c1}, transparent),
@@ -375,7 +381,7 @@ const AmbientBg = ({ phase }: AmbientBgProps) => {
         transition: "background 1.8s ease",
       }} />
       {/* Grain texture overlay — dark: 4% / light: 2% */}
-      <div style={{
+      <div data-ambient-bg="true" style={{
         position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1,
         backgroundImage: GRAIN_SVG,
         backgroundRepeat: "repeat",
@@ -1088,6 +1094,15 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailDone, setEmailDone] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [printPending, setPrintPending] = useState(false);
+
+  // Fire print only after React has re-rendered with tab="plan" in the DOM
+  useEffect(() => {
+    if (printPending && tab === "plan") {
+      window.print();
+      setPrintPending(false);
+    }
+  }, [printPending, tab]);
 
   const p = result.paths[selPath];
 
@@ -1135,20 +1150,42 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
             }}>
               Your Exit Protocol
             </div>
-            <button
-              data-testid="start-over-btn"
-              onClick={onStartOver}
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontSize: 12, color: t.textDim, opacity: 0.5,
-                letterSpacing: "0.04em", padding: 0,
-                transition: "opacity 0.2s ease",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
-            >
-              ← Start over
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button
+                data-testid="print-btn"
+                onClick={() => { setTab("plan"); setPrintPending(true); }}
+                style={{
+                  background: "none", border: `1px solid ${t.border}`,
+                  borderRadius: 6, cursor: "pointer",
+                  fontSize: 11, color: t.muted, letterSpacing: "0.06em",
+                  padding: "4px 10px", transition: "all 0.2s ease",
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = t.amber;
+                  (e.currentTarget as HTMLButtonElement).style.color = t.amber;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = t.border;
+                  (e.currentTarget as HTMLButtonElement).style.color = t.muted;
+                }}
+              >
+                ⎙ Print
+              </button>
+              <button
+                data-testid="start-over-btn"
+                onClick={onStartOver}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 12, color: t.textDim, opacity: 0.5,
+                  letterSpacing: "0.04em", padding: 0,
+                  transition: "opacity 0.2s ease",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = "0.5"; }}
+              >
+                ← Start over
+              </button>
+            </div>
           </div>
           <h1 style={{
             fontFamily: "'Fraunces', serif",
@@ -1663,7 +1700,7 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button
               data-testid="print-btn"
-              onClick={() => { setTab("plan"); setTimeout(() => window.print(), 80); }}
+              onClick={() => { setTab("plan"); setPrintPending(true); }}
               style={{
                 background: "none", border: `1px solid ${t.border}`,
                 borderRadius: 6, cursor: "pointer",
