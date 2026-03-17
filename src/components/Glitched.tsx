@@ -699,9 +699,15 @@ const LandingScreen = ({ onBegin }: LandingScreenProps) => {
 // ============================================================
 // SCREEN 2 — INTAKE
 // ============================================================
+interface ErrorInfo {
+  code: number | null;
+  message: string;
+}
+
 interface IntakeScreenProps {
-  onSubmit:     (answers: UserAnswers, captchaToken: string) => void;
-  isSubmitting: boolean;
+  onSubmit:       (answers: UserAnswers, captchaToken: string) => void;
+  isSubmitting:   boolean;
+  initialAnswers?: UserAnswers;
 }
 
 interface Question {
@@ -712,11 +718,11 @@ interface Question {
   ph: string;
 }
 
-const IntakeScreen = ({ onSubmit, isSubmitting }: IntakeScreenProps) => {
+const IntakeScreen = ({ onSubmit, isSubmitting, initialAnswers }: IntakeScreenProps) => {
   const { t } = useTheme();
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<UserAnswers>({ role: "", want: "", fear: "" });
-  const [current, setCurrent] = useState("");
+  const [step, setStep] = useState(initialAnswers ? 2 : 0);
+  const [answers, setAnswers] = useState<UserAnswers>(initialAnswers ?? { role: "", want: "", fear: "" });
+  const [current, setCurrent] = useState(initialAnswers?.fear ?? "");
   const [animKey, setAnimKey] = useState(0);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -1769,8 +1775,42 @@ const PlanScreen = ({ result, onStartOver }: PlanScreenProps) => {
 // ERROR SCREEN
 // ============================================================
 
-const ErrorScreen = ({ onRetry }: { onRetry: () => void }) => {
+function errorInfoFromStatus(status: number): ErrorInfo {
+  if (status === 429) return {
+    code: 429,
+    message: "You\u2019ve made several analyses recently. The service limits requests to stay available for everyone. Wait a minute, then try again.",
+  };
+  if (status === 503) return {
+    code: 503,
+    message: "Our analysis service is temporarily under load. This usually clears up in under a minute \u2014 your work is worth the wait.",
+  };
+  if (status === 504) return {
+    code: 504,
+    message: "The analysis took longer than expected \u2014 this can happen with complex career backgrounds. Try again and it should complete.",
+  };
+  if (status === 403) return {
+    code: 403,
+    message: "Bot verification failed. Refresh the page and try again.",
+  };
+  if (status === 422 || status === 400) return {
+    code: status,
+    message: "We had trouble processing one of your answers. Go back, review what you wrote, and try again.",
+  };
+  return {
+    code: status,
+    message: "Something went wrong on our end. Try again \u2014 it usually resolves quickly.",
+  };
+}
+
+const ErrorScreen = ({ errorInfo, onRetry, onStartOver }: {
+  errorInfo: ErrorInfo | null;
+  onRetry: () => void;
+  onStartOver: () => void;
+}) => {
   const { t } = useTheme();
+  const message = errorInfo?.message ?? "We couldn\u2019t reach the analysis service. Check your connection and try again.";
+  const isInputError = errorInfo?.code === 422 || errorInfo?.code === 400;
+
   return (
     <div data-testid="error-screen" style={{
       minHeight: "100vh", display: "flex", flexDirection: "column",
@@ -1779,23 +1819,37 @@ const ErrorScreen = ({ onRetry }: { onRetry: () => void }) => {
     }}>
       <div style={{ fontSize: "2.5rem", marginBottom: "1.25rem" }}>⚡</div>
       <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "1.75rem", color: t.text, margin: "0 0 0.75rem" }}>
-        Oh snap.
+        {isInputError ? "Let\u2019s adjust that." : "Something went wrong."}
       </h2>
-      <p style={{ color: t.textDim, fontSize: "1rem", maxWidth: "360px", lineHeight: 1.6, margin: "0 0 2rem" }}>
-        We couldn&apos;t reach the analysis service. Check your connection and try again.
+      <p style={{ color: t.textDim, fontSize: "1rem", maxWidth: "400px", lineHeight: 1.6, margin: "0 0 2rem" }}>
+        {message}
       </p>
-      <button
-        data-testid="error-retry-btn"
-        onClick={onRetry}
-        style={{
-          background: t.btnPrimary, color: t.btnPrimaryText,
-          border: "none", borderRadius: "8px",
-          padding: "0.75rem 2rem", fontSize: "1rem",
-          fontWeight: 600, cursor: "pointer",
-        }}
-      >
-        Try again
-      </button>
+      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+        <button
+          data-testid="error-retry-btn"
+          onClick={onRetry}
+          style={{
+            background: t.btnPrimary, color: t.btnPrimaryText,
+            border: "none", borderRadius: "8px",
+            padding: "0.75rem 2rem", fontSize: "1rem",
+            fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          {isInputError ? "Edit my answers" : "Try again"}
+        </button>
+        <button
+          data-testid="error-start-over-btn"
+          onClick={onStartOver}
+          style={{
+            background: "transparent", color: t.muted,
+            border: `1px solid ${t.border}`, borderRadius: "8px",
+            padding: "0.75rem 2rem", fontSize: "1rem",
+            fontWeight: 500, cursor: "pointer",
+          }}
+        >
+          Start over
+        </button>
+      </div>
     </div>
   );
 };
@@ -1821,6 +1875,8 @@ export default function Glitched() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [breathingDone, setBreathingDone] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastAnswers, setLastAnswers] = useState<UserAnswers | null>(null);
+  const [errorInfo, setErrorInfo] = useState<ErrorInfo | null>(null);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigateTo = useCallback((next: Screen) => {
@@ -1867,16 +1923,23 @@ export default function Glitched() {
       return;
     }
 
+    setLastAnswers(answers);
+
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...answers, captchaToken }),
       });
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) {
+        setErrorInfo(errorInfoFromStatus(res.status));
+        navigateTo("error");
+        return;
+      }
       const data = (await res.json()) as AnalysisResult;
       setAnalysisResult(data);
     } catch {
+      setErrorInfo({ code: null, message: "We couldn\u2019t reach the analysis service. Check your connection and try again." });
       navigateTo("error");
     } finally {
       setIsSubmitting(false);
@@ -1888,6 +1951,8 @@ export default function Glitched() {
     setAnalysisResult(null);
     setBreathingDone(false);
     setIsSubmitting(false);
+    setLastAnswers(null);
+    setErrorInfo(null);
     navigateTo("landing");
   }, [navigateTo]);
 
@@ -1919,6 +1984,7 @@ export default function Glitched() {
             <IntakeScreen
               onSubmit={(answers, token) => { void handleIntakeSubmit(answers, token); }}
               isSubmitting={isSubmitting}
+              initialAnswers={lastAnswers ?? undefined}
             />
           )}
           {screen === "breathing" && (
@@ -1928,7 +1994,11 @@ export default function Glitched() {
             <PlanScreen result={analysisResult} onStartOver={handleStartOver} />
           )}
           {screen === "error" && (
-            <ErrorScreen onRetry={() => navigateTo("intake")} />
+            <ErrorScreen
+              errorInfo={errorInfo}
+              onRetry={() => navigateTo("intake")}
+              onStartOver={handleStartOver}
+            />
           )}
         </div>
       </div>
