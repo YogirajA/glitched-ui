@@ -126,10 +126,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing answers" }, { status: 400 });
     }
 
+    const MAX_FIELD = 600;
+    const MIN_FIELD = 10;
+    const fields = { role: answers.role, want: answers.want, fear: answers.fear } as const;
+    for (const [key, val] of Object.entries(fields)) {
+      const trimmed = val.trim();
+      if (trimmed.length < MIN_FIELD) {
+        return NextResponse.json({ error: `Answer too short: ${key}` }, { status: 400 });
+      }
+      if (trimmed.length > MAX_FIELD) {
+        return NextResponse.json({ error: `Answer too long: ${key}` }, { status: 400 });
+      }
+    }
+
+    // Detect all-identical answers (likely bot/junk submission)
+    const trimmedRole = answers.role.trim();
+    const trimmedWant = answers.want.trim();
+    const trimmedFear = answers.fear.trim();
+    if (trimmedRole === trimmedWant && trimmedWant === trimmedFear) {
+      return NextResponse.json({ error: "Invalid answers" }, { status: 400 });
+    }
+
     const validAnswers: UserAnswers = {
-      role: answers.role,
-      want: answers.want,
-      fear: answers.fear,
+      role: trimmedRole,
+      want: trimmedWant,
+      fear: trimmedFear,
     };
 
     // ── Content cache check (after CAPTCHA, before pipeline) ──
