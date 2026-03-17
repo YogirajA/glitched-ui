@@ -853,8 +853,9 @@ const IntakeScreen = ({ onSubmit, isSubmitting }: IntakeScreenProps) => {
             data-testid="intake-textarea"
             ref={ref}
             value={current}
+            maxLength={600}
             onChange={e => {
-              setCurrent(e.target.value);
+              setCurrent(e.target.value.slice(0, 600));
               // Auto-resize to content height
               const el = e.currentTarget;
               el.style.height = "auto";
@@ -876,6 +877,15 @@ const IntakeScreen = ({ onSubmit, isSubmitting }: IntakeScreenProps) => {
               minHeight: 96, overflow: "hidden",
             }}
           />
+          {current.length > 400 && (
+            <div style={{
+              textAlign: "right", fontSize: 12,
+              color: current.length >= 580 ? t.amber : t.muted,
+              marginTop: 4, transition: "color 0.3s ease",
+            }}>
+              {current.length}/600
+            </div>
+          )}
 
           {isLastStep && (
             <Turnstile
