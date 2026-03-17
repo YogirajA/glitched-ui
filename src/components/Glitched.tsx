@@ -756,8 +756,9 @@ const IntakeScreen = ({ onSubmit, isSubmitting, initialAnswers }: IntakeScreenPr
 
   const isLastStep = step === questions.length - 1;
 
+  const MIN_CHARS = 10;
   const next = useCallback(() => {
-    if (!current.trim()) return;
+    if (current.trim().length < MIN_CHARS) return;
     if (isLastStep && !captchaToken) return;
     const updated: UserAnswers = { ...answers, [questions[step].key]: current };
     setAnswers(updated);
@@ -883,7 +884,14 @@ const IntakeScreen = ({ onSubmit, isSubmitting, initialAnswers }: IntakeScreenPr
               minHeight: 96, overflow: "hidden",
             }}
           />
-          {current.length > 400 && (
+          {current.length > 0 && current.trim().length < MIN_CHARS ? (
+            <div style={{
+              fontSize: 12, color: t.muted,
+              marginTop: 4, transition: "color 0.3s ease",
+            }}>
+              {MIN_CHARS - current.trim().length} more character{MIN_CHARS - current.trim().length !== 1 ? "s" : ""} needed
+            </div>
+          ) : current.length > 400 ? (
             <div style={{
               textAlign: "right", fontSize: 12,
               color: current.length >= 580 ? t.amber : t.muted,
@@ -891,7 +899,7 @@ const IntakeScreen = ({ onSubmit, isSubmitting, initialAnswers }: IntakeScreenPr
             }}>
               {current.length}/600
             </div>
-          )}
+          ) : null}
 
           {isLastStep && (
             <Turnstile
@@ -909,15 +917,15 @@ const IntakeScreen = ({ onSubmit, isSubmitting, initialAnswers }: IntakeScreenPr
             <button
               data-testid="continue-btn"
               onClick={next}
-              disabled={!current.trim() || (isLastStep && !captchaToken) || isSubmitting}
+              disabled={current.trim().length < MIN_CHARS || (isLastStep && !captchaToken) || isSubmitting}
               className="btn-primary"
               style={{
-                background: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : "transparent",
-                border: `1px solid ${(current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : t.border}`,
-                borderRadius: 8, color: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimaryText : t.muted,
+                background: (current.trim().length >= MIN_CHARS && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : "transparent",
+                border: `1px solid ${(current.trim().length >= MIN_CHARS && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimary : t.border}`,
+                borderRadius: 8, color: (current.trim().length >= MIN_CHARS && (!isLastStep || captchaToken) && !isSubmitting) ? t.btnPrimaryText : t.muted,
                 fontSize: 14, fontWeight: 500, padding: "12px 28px",
-                cursor: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? "pointer" : "not-allowed",
-                boxShadow: (current.trim() && (!isLastStep || captchaToken) && !isSubmitting) ? `0 4px 18px ${t.amberBg}` : "none",
+                cursor: (current.trim().length >= MIN_CHARS && (!isLastStep || captchaToken) && !isSubmitting) ? "pointer" : "not-allowed",
+                boxShadow: (current.trim().length >= MIN_CHARS && (!isLastStep || captchaToken) && !isSubmitting) ? `0 4px 18px ${t.amberBg}` : "none",
                 transition: "all 0.3s ease",
               }}
             >
@@ -1816,6 +1824,7 @@ const ErrorScreen = ({ errorInfo, onRetry, onStartOver }: {
       minHeight: "100vh", display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: "2rem", textAlign: "center",
+      position: "relative", zIndex: 1,
     }}>
       <div style={{ fontSize: "2.5rem", marginBottom: "1.25rem" }}>⚡</div>
       <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: "1.75rem", color: t.text, margin: "0 0 0.75rem" }}>
